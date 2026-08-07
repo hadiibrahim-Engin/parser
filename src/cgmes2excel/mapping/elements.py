@@ -19,14 +19,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from ..cgmes.graph import CimObject
-from ..diagnostics import Diagnostics
-from ..domain.classification import ElementCategory, EquipmentRegistry
-from ..domain.geography import GeographyResolver
-from ..domain.network import NetworkModel
-from ..domain.resolution import Resolution
-from .rows import FieldRule, Row, RowBuilder, unavailable
-from .schema import NETZELEMENTE
+from cgmes2excel.cgmes.graph import CimObject
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.domain.classification import ElementCategory, EquipmentRegistry
+from cgmes2excel.domain.geography import GeographyResolver
+from cgmes2excel.domain.network import NetworkModel
+from cgmes2excel.domain.resolution import Resolution
+from cgmes2excel.mapping.rows import FieldRule, Row, RowBuilder, unavailable
+from cgmes2excel.mapping.schema import NETZELEMENTE
 
 _NOT_IN_CGMES = "notRepresentedInCgmes"
 _ORGANISATION_SPECIFIC = "organisationSpecificNotInCgmes"

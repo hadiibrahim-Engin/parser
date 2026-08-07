@@ -15,10 +15,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ..diagnostics import Diagnostics
-from ..logging import getLogger
-from ..mapping.rows import Row
-from ..mapping.schema import SHEETS, SchemaViolation, SheetSchema, ValueType
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.logging import getLogger
+from cgmes2excel.mapping.rows import Row
+from cgmes2excel.mapping.schema import SHEETS, SchemaViolation, SheetSchema, ValueType
 
 _TEXT_FORMAT = "@"
 _HEADER_FONT = Font(bold=True)

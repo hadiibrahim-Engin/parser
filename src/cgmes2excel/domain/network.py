@@ -7,9 +7,9 @@ graph themselves, so the traversal logic exists exactly once.
 
 from __future__ import annotations
 
-from ..cgmes.graph import CimGraph, CimObject
-from ..diagnostics import Diagnostics
-from .resolution import Resolution
+from cgmes2excel.cgmes.graph import CimGraph, CimObject
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.domain.resolution import Resolution
 
 # Containment associations, keyed by the class that declares them.
 _PARENT_PROPERTIES: tuple[str, ...] = (

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import openpyxl
 
-from ..mapping.schema import SHEETS
+from cgmes2excel.mapping.schema import SHEETS
 
 
 @dataclass(slots=True)

@@ -13,9 +13,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from ..diagnostics import Diagnostics
-from .namespaces import isCimNamespace
-from .reader import RawObject
+from cgmes2excel.cgmes.namespaces import isCimNamespace
+from cgmes2excel.cgmes.reader import RawObject
+from cgmes2excel.diagnostics import Diagnostics
 
 
 class Profile(Enum):

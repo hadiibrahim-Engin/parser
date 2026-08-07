@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from xml.etree import ElementTree
 
-from .identifiers import Identifier
-from .namespaces import RDF_ABOUT, RDF_ID, RDF_RESOURCE, splitTag
+from cgmes2excel.cgmes.identifiers import Identifier
+from cgmes2excel.cgmes.namespaces import RDF_ABOUT, RDF_ID, RDF_RESOURCE, splitTag
 
 
 class MalformedDocumentError(Exception):

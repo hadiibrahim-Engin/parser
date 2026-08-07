@@ -10,10 +10,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-from ..diagnostics import Diagnostics
-from .identifiers import Identifier
-from .namespaces import isCimNamespace
-from .reader import RawObject
+from cgmes2excel.cgmes.identifiers import Identifier
+from cgmes2excel.cgmes.namespaces import isCimNamespace
+from cgmes2excel.cgmes.reader import RawObject
+from cgmes2excel.diagnostics import Diagnostics
 
 
 def _isEnumerationValue(raw: str) -> bool:

@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from ..diagnostics import Diagnostics
-from ..domain.resolution import Resolution
-from .schema import SchemaViolation, SheetSchema, ValueType
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.domain.resolution import Resolution
+from cgmes2excel.mapping.schema import SchemaViolation, SheetSchema, ValueType
 
 
 @dataclass(frozen=True, slots=True)

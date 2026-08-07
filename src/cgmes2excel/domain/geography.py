@@ -10,9 +10,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ..cgmes.graph import CimGraph, CimObject
-from ..diagnostics import Diagnostics
-from .resolution import Resolution
+from cgmes2excel.cgmes.graph import CimGraph, CimObject
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.domain.resolution import Resolution
 
 _WGS84_PATTERNS = (
     re.compile(r"epsg:{1,2}4326\b", re.IGNORECASE),

@@ -10,20 +10,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .cgmes.graph import CimGraph
-from .cgmes.profiles import DocumentProfile, Profile, ProfileEvidence, detectProfile
-from .cgmes.reader import MalformedDocumentError
-from .diagnostics import Diagnostics
-from .domain.classification import EquipmentRegistry
-from .domain.geography import GeographyResolver
-from .domain.network import NetworkModel
-from .export.excel import writeWorkbook
-from .export.validation import ValidationResult, validateWorkbook
-from .inputs import DocumentSource, discoverDocuments, readDocument
-from .logging import getLogger
-from .mapping.elements import buildElementRows
-from .mapping.rows import Row
-from .mapping.stations import buildStationRows
+from cgmes2excel.cgmes.graph import CimGraph
+from cgmes2excel.cgmes.profiles import DocumentProfile, Profile, ProfileEvidence, detectProfile
+from cgmes2excel.cgmes.reader import MalformedDocumentError
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.domain.classification import EquipmentRegistry
+from cgmes2excel.domain.geography import GeographyResolver
+from cgmes2excel.domain.network import NetworkModel
+from cgmes2excel.export.excel import writeWorkbook
+from cgmes2excel.export.validation import ValidationResult, validateWorkbook
+from cgmes2excel.inputs import DocumentSource, discoverDocuments, readDocument
+from cgmes2excel.logging import getLogger
+from cgmes2excel.mapping.elements import buildElementRows
+from cgmes2excel.mapping.rows import Row
+from cgmes2excel.mapping.stations import buildStationRows
 
 logger = getLogger("cgmes2excel.pipeline")
 

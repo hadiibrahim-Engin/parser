@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from .cgmes.reader import DocumentStats, RawObject, readRdfXmlStream
+from cgmes2excel.cgmes.reader import DocumentStats, RawObject, readRdfXmlStream
 
 _XML_SUFFIX = ".xml"
 _ZIP_SUFFIX = ".zip"

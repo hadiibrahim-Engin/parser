@@ -5,14 +5,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .diagnostics import Diagnostics
-from .inputs import InputNotFoundError
-from .logging import configureLogging, getLogger
-from .mapping.elements import NETZELEMENTE_RULES
-from .mapping.rows import RuleDocumentation
-from .mapping.schema import NETZELEMENTE, STATIONEN
-from .mapping.stations import STATIONEN_RULES
-from .pipeline import ConversionOptions, NoDocumentsError, convert
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.inputs import InputNotFoundError
+from cgmes2excel.logging import configureLogging, getLogger
+from cgmes2excel.mapping.elements import NETZELEMENTE_RULES
+from cgmes2excel.mapping.rows import RuleDocumentation
+from cgmes2excel.mapping.schema import NETZELEMENTE, STATIONEN
+from cgmes2excel.mapping.stations import STATIONEN_RULES
+from cgmes2excel.pipeline import ConversionOptions, NoDocumentsError, convert
 
 _DEFAULT_OUTPUT = Path("cgmes-export.xlsx")
 

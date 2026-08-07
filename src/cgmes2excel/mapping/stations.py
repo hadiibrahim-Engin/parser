@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..cgmes.graph import CimObject
-from ..diagnostics import Diagnostics
-from ..domain.geography import GeographyResolver
-from ..domain.network import NetworkModel
-from ..domain.resolution import Resolution
-from .rows import FieldRule, Row, RowBuilder, unavailable
-from .schema import STATIONEN
+from cgmes2excel.cgmes.graph import CimObject
+from cgmes2excel.diagnostics import Diagnostics
+from cgmes2excel.domain.geography import GeographyResolver
+from cgmes2excel.domain.network import NetworkModel
+from cgmes2excel.domain.resolution import Resolution
+from cgmes2excel.mapping.rows import FieldRule, Row, RowBuilder, unavailable
+from cgmes2excel.mapping.schema import STATIONEN
 
 _NOT_IN_CGMES = "notRepresentedInCgmes"
 _ORGANISATION_SPECIFIC = "organisationSpecificNotInCgmes"
