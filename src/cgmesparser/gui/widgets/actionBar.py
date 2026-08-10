@@ -6,7 +6,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QWidget
 
 from cgmesparser.gui.core.transitions import ButtonStates
-from cgmesparser.gui.resources.icons import icon as buildIcon
 from cgmesparser.gui.resources.tokens import TOKENS, Tokens
 
 
@@ -29,20 +28,28 @@ class ActionBar(QFrame):
         self._tokens = tokens
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 14, 20, 14)
-        layout.setSpacing(16)
+        layout.setContentsMargins(24, 11, 24, 11)
+        layout.setSpacing(10)
 
-        self._preferences = self._button("Preferences", "gear", tokens.textSecondary)
-        self._validate = self._button("Validate Inputs", "checkBadge", tokens.primary, "accentButton")
-        self._start = self._button("Start Conversion", "play", tokens.textOnPrimary, "primaryButton")
-        self._stop = self._button("Stop", "stop", tokens.textSecondary)
-        self._exit = self._button("Exit", "exit", tokens.textSecondary)
+        self._preferences = self._button("Preferences")
+        self._validate = self._button("Validate Inputs", "accentButton")
+        self._start = self._button("Start Conversion", "primaryButton")
+        self._stop = self._button("Stop")
+        self._exit = self._button("Exit")
 
-        layout.addWidget(self._preferences, 2)
-        layout.addWidget(self._validate, 3)
-        layout.addWidget(self._start, 4)
-        layout.addWidget(self._stop, 2)
-        layout.addWidget(self._exit, 2)
+        self._preferences.setMinimumWidth(132)
+        self._validate.setMinimumWidth(154)
+        self._start.setMinimumWidth(188)
+        self._stop.setMinimumWidth(104)
+        self._exit.setMinimumWidth(88)
+
+        layout.addWidget(self._preferences)
+        layout.addStretch(1)
+        layout.addWidget(self._validate)
+        layout.addWidget(self._start)
+        layout.addWidget(self._stop)
+        layout.addSpacing(8)
+        layout.addWidget(self._exit)
 
         self._preferences.clicked.connect(self.preferencesRequested)
         self._validate.clicked.connect(self.validateRequested)
@@ -50,11 +57,10 @@ class ActionBar(QFrame):
         self._stop.clicked.connect(self.stopRequested)
         self._exit.clicked.connect(self.exitRequested)
 
-    def _button(self, text: str, iconName: str, colour: str, objectName: str = "") -> QPushButton:
-        button = QPushButton(f"  {text}", self)
+    def _button(self, text: str, objectName: str = "") -> QPushButton:
+        button = QPushButton(text, self)
         if objectName:
             button.setObjectName(objectName)
-        button.setIcon(buildIcon(iconName, colour, 18))
         return button
 
     def applyButtonStates(self, states: ButtonStates) -> None:

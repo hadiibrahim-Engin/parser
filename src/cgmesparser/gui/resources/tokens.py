@@ -12,60 +12,60 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Tokens:
-    """Colours, metrics and type sizes taken from the interface design."""
+    """Colours, metrics and type sizes for the desktop workspace."""
 
     # surfaces
-    appBackground: str = "#F2F5F9"
+    appBackground: str = "#F4F7FB"
     cardBackground: str = "#FFFFFF"
-    cardBorder: str = "#DCE4ED"
-    inputBackground: str = "#FFFFFF"
-    inputBorder: str = "#CFD9E4"
-    headerGradientStart: str = "#EAF3FD"
-    headerGradientEnd: str = "#D7E9FA"
-    headerMotif: str = "#BCD9F2"
+    cardBorder: str = "#D9E3EE"
+    inputBackground: str = "#FBFCFE"
+    inputBorder: str = "#C9D6E3"
+    headerGradientStart: str = "#102F4F"
+    headerGradientEnd: str = "#174C78"
+    headerMotif: str = "#6C98BA"
 
     # brand
-    primary: str = "#1668C7"
-    primaryHover: str = "#1257A8"
-    primaryPressed: str = "#0E4586"
-    primarySoft: str = "#E8F1FC"
-    titleNavy: str = "#10375E"
-    subtitle: str = "#4E7CA8"
+    primary: str = "#1769E0"
+    primaryHover: str = "#0F5BC7"
+    primaryPressed: str = "#0B49A2"
+    primarySoft: str = "#EAF2FF"
+    titleNavy: str = "#102F4F"
+    subtitle: str = "#C6D9EA"
 
     # text
-    textPrimary: str = "#1F2933"
-    textSecondary: str = "#6B7684"
-    textMuted: str = "#98A2AE"
+    textPrimary: str = "#172536"
+    textSecondary: str = "#5D6D7E"
+    textMuted: str = "#8A99A8"
     textOnPrimary: str = "#FFFFFF"
 
     # status
-    success: str = "#21A366"
-    successBackground: str = "#EBF8F1"
-    successBorder: str = "#BFE6D2"
-    warning: str = "#E9A21A"
-    warningBackground: str = "#FDF6E7"
-    error: str = "#E0433F"
-    errorBackground: str = "#FDEDEC"
+    success: str = "#17875B"
+    successBackground: str = "#EBF8F2"
+    successBorder: str = "#B9E3D1"
+    warning: str = "#D98A0B"
+    warningBackground: str = "#FFF7E6"
+    error: str = "#D94040"
+    errorBackground: str = "#FFF0F0"
 
     # components
-    track: str = "#E4E9F0"
-    stepperPending: str = "#C7D0DA"
-    divider: str = "#E4E9F0"
-    scrollHandle: str = "#C7D0DA"
+    track: str = "#E4EAF1"
+    stepperPending: str = "#BCC9D6"
+    divider: str = "#E7ECF2"
+    scrollHandle: str = "#B9C6D3"
 
     # metrics, in device-independent pixels
-    cardRadius: int = 10
-    controlRadius: int = 6
-    cardPadding: int = 16
-    gridGap: int = 12
-    controlHeight: int = 34
+    cardRadius: int = 14
+    controlRadius: int = 8
+    cardPadding: int = 20
+    gridGap: int = 14
+    controlHeight: int = 38
 
     # type
     fontFamily: str = '"Segoe UI", "Segoe UI Variable", -apple-system, "Helvetica Neue", Arial, sans-serif'
     monoFamily: str = '"Cascadia Mono", Consolas, "SF Mono", "Menlo", monospace'
-    titleSize: int = 28
-    subtitleSize: int = 14
-    cardTitleSize: int = 15
+    titleSize: int = 23
+    subtitleSize: int = 12
+    cardTitleSize: int = 16
     bodySize: int = 13
     smallSize: int = 12
 

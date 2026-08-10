@@ -25,7 +25,7 @@ QMainWindow, QDialog, #rootSurface {{
     background: {appBackground};
 }}
 
-QScrollArea, QScrollArea > QWidget > QWidget {{
+QScrollArea, QScrollArea > QWidget > QWidget, #workspaceSurface, #contextRail {{
     background: transparent;
     border: none;
 }}
@@ -40,29 +40,21 @@ QScrollArea, QScrollArea > QWidget > QWidget {{
 
 #cardTitle {{
     font-size: {cardTitleSize}px;
-    font-weight: 600;
+    font-weight: 700;
     color: {textPrimary};
 }}
 
-#cardTitleAccent {{
-    font-size: {cardTitleSize}px;
-    font-weight: 600;
-    color: {primary};
-}}
-
-#sectionBadge {{
-    background: {primary};
-    color: {textOnPrimary};
-    border-radius: 5px;
+#cardDescription {{
+    color: {textSecondary};
     font-size: {smallSize}px;
-    font-weight: 700;
-    min-width: 22px;
-    max-width: 22px;
-    min-height: 22px;
-    max-height: 22px;
 }}
 
 /* ---- header ------------------------------------------------------------ */
+
+#headerBanner {{
+    background: {cardBackground};
+    border-bottom: 1px solid {cardBorder};
+}}
 
 #headerTitle {{
     font-size: {titleSize}px;
@@ -72,17 +64,29 @@ QScrollArea, QScrollArea > QWidget > QWidget {{
 
 #headerSubtitle {{
     font-size: {subtitleSize}px;
-    color: {subtitle};
+    color: {textSecondary};
 }}
 
 /* ---- inputs ------------------------------------------------------------ */
 
 #inputLabel {{
     color: {textPrimary};
+    font-weight: 600;
+}}
+
+#inputSourceRow {{
+    background: {inputBackground};
+    border: 1px solid {cardBorder};
+    border-radius: {controlRadius}px;
+}}
+
+#inputSourceRow:hover {{
+    border-color: {inputBorder};
+    background: {cardBackground};
 }}
 
 QLineEdit {{
-    background: {inputBackground};
+    background: {cardBackground};
     border: 1px solid {inputBorder};
     border-radius: {controlRadius}px;
     padding: 0 10px;
@@ -92,12 +96,18 @@ QLineEdit {{
 }}
 
 QLineEdit:focus {{
-    border: 1px solid {primary};
+    border: 2px solid {primary};
 }}
 
 QLineEdit:disabled {{
     background: {appBackground};
     color: {textMuted};
+}}
+
+/* A path field while something droppable hovers over its row. */
+QLineEdit[dropActive="true"] {{
+    border: 2px dashed {primary};
+    background: {primarySoft};
 }}
 
 /* ---- buttons ----------------------------------------------------------- */
@@ -106,7 +116,7 @@ QPushButton {{
     background: {cardBackground};
     border: 1px solid {inputBorder};
     border-radius: {controlRadius}px;
-    padding: 0 14px;
+    padding: 0 15px;
     min-height: {controlHeight}px;
     color: {textPrimary};
 }}
@@ -114,6 +124,19 @@ QPushButton {{
 QPushButton:hover {{
     background: {primarySoft};
     border-color: {primary};
+}}
+
+QPushButton#browseButton {{
+    background: {primarySoft};
+    border-color: transparent;
+    color: {primary};
+    font-weight: 600;
+}}
+
+QPushButton#browseButton:hover {{
+    background: {primary};
+    border-color: {primary};
+    color: {textOnPrimary};
 }}
 
 QPushButton:pressed {{
@@ -161,33 +184,35 @@ QPushButton#accentButton:disabled {{
 }}
 
 QPushButton#linkButton {{
-    background: transparent;
-    border: 1px solid {primary};
+    background: {primarySoft};
+    border: 1px solid transparent;
     color: {primary};
     font-weight: 600;
 }}
 
 QPushButton#linkButton:disabled {{
-    border-color: {cardBorder};
+    background: {appBackground};
+    border-color: transparent;
     color: {textMuted};
 }}
 
 QPushButton#ghostButton {{
     background: transparent;
-    border: 1px solid {inputBorder};
+    border: 1px solid transparent;
+    color: {textSecondary};
 }}
 
 /* ---- validation strip -------------------------------------------------- */
 
 #validationStrip {{
-    border-radius: {controlRadius}px;
+    border-radius: 10px;
     border: 1px solid {successBorder};
     background: {successBackground};
 }}
 
 #validationStrip[tone="neutral"] {{
     border-color: {cardBorder};
-    background: {appBackground};
+    background: {inputBackground};
 }}
 
 #validationStrip[tone="error"] {{
@@ -214,14 +239,26 @@ QPushButton#ghostButton {{
     font-size: {smallSize}px;
 }}
 
+#checkText[tone="ok"] {{
+    color: {success};
+}}
+
+#checkText[tone="warning"] {{
+    color: {warning};
+}}
+
+#checkText[tone="error"] {{
+    color: {error};
+}}
+
 /* ---- processing -------------------------------------------------------- */
 
 QProgressBar {{
     background: {track};
     border: none;
     border-radius: 6px;
-    min-height: 12px;
-    max-height: 12px;
+    min-height: 9px;
+    max-height: 9px;
     text-align: center;
 }}
 
@@ -235,13 +272,21 @@ QProgressBar::chunk {{
     font-weight: 700;
 }}
 
+#processingStatus {{
+    background: {inputBackground};
+    border: 1px solid {cardBorder};
+    border-radius: {controlRadius}px;
+}}
+
 #statusCaption {{
-    color: {primary};
-    font-weight: 600;
+    color: {textMuted};
+    font-size: 10px;
+    font-weight: 700;
 }}
 
 #statusText {{
-    color: {textPrimary};
+    color: {primary};
+    font-weight: 700;
 }}
 
 /* ---- messages ---------------------------------------------------------- */
@@ -255,8 +300,8 @@ QTabBar::tab {{
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    padding: 6px 14px 8px 4px;
-    margin-right: 14px;
+    padding: 7px 12px 9px 4px;
+    margin-right: 10px;
     color: {textSecondary};
 }}
 
@@ -271,7 +316,7 @@ QTabBar::tab:hover:!selected {{
 }}
 
 QTableView {{
-    background: {cardBackground};
+    background: {inputBackground};
     border: 1px solid {cardBorder};
     border-radius: {controlRadius}px;
     gridline-color: transparent;
@@ -280,7 +325,7 @@ QTableView {{
 }}
 
 QTableView::item {{
-    padding: 3px 4px;
+    padding: 4px 5px;
     border: none;
 }}
 
@@ -290,8 +335,15 @@ QTableView::item {{
 
 /* ---- key / value rows -------------------------------------------------- */
 
+#keyValueRow {{
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid {divider};
+    border-radius: 0;
+}}
+
 #keyLabel {{
-    color: {textPrimary};
+    color: {textSecondary};
 }}
 
 #keySeparator {{
@@ -300,7 +352,7 @@ QTableView::item {{
 
 #valueLabel {{
     font-weight: 700;
-    color: {textPrimary};
+    color: {titleNavy};
 }}
 
 #valueLabel[empty="true"] {{
@@ -316,8 +368,8 @@ QTableView::item {{
 }}
 
 #actionBar QPushButton {{
-    min-height: 42px;
-    font-size: 14px;
+    min-height: 40px;
+    font-size: 13px;
 }}
 
 /* ---- scrollbars -------------------------------------------------------- */
@@ -361,8 +413,9 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
 /* ---- dialogs ----------------------------------------------------------- */
 
 QGroupBox {{
+    background: {cardBackground};
     border: 1px solid {cardBorder};
-    border-radius: {controlRadius}px;
+    border-radius: {cardRadius}px;
     margin-top: 10px;
     padding: 14px 12px 10px 12px;
     font-weight: 600;
@@ -385,6 +438,10 @@ QSpinBox {{
 
 QCheckBox {{
     spacing: 8px;
+}}
+
+QDialogButtonBox QPushButton {{
+    min-width: 96px;
 }}
 
 QToolTip {{

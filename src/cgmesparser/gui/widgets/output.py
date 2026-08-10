@@ -8,7 +8,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QPushButton, QWidget
 
 from cgmesparser.gui.core.result import ConversionOutcome
-from cgmesparser.gui.resources.icons import icon as buildIcon
 from cgmesparser.gui.resources.tokens import TOKENS, Tokens
 from cgmesparser.gui.widgets.common import Card, KeyValueRow
 
@@ -24,24 +23,26 @@ class OutputCard(Card):
     openFolderRequested = Signal()
 
     def __init__(self, tokens: Tokens = TOKENS, parent: QWidget | None = None) -> None:
-        super().__init__("Output", badge="4", tokens=tokens, parent=parent)
+        super().__init__(
+            "Latest Output",
+            description="Summary from the most recent completed run.",
+            tokens=tokens,
+            parent=parent,
+        )
         self._tokens = tokens
 
-        self._excelFiles = KeyValueRow("Excel files", "excel", tokens.success, 168, tokens, self)
-        self._lines = KeyValueRow("Detected lines", "lines", tokens.primary, 168, tokens, self)
-        self._substations = KeyValueRow(
-            "Detected substations", "substation", tokens.primary, 168, tokens, self
-        )
-        self._lastRun = KeyValueRow("Last run", "clock", tokens.textSecondary, 168, tokens, self)
+        self._excelFiles = KeyValueRow("Excel files", 168, tokens, self)
+        self._lines = KeyValueRow("Detected lines", 168, tokens, self)
+        self._substations = KeyValueRow("Detected substations", 168, tokens, self)
+        self._lastRun = KeyValueRow("Last run", 168, tokens, self)
 
         for row in (self._excelFiles, self._lines, self._substations, self._lastRun):
             self.addBodyWidget(row)
 
         self.addBodyStretch(1)
 
-        self._openFolder = QPushButton("  Open Output Folder", self)
+        self._openFolder = QPushButton("Open Output Folder", self)
         self._openFolder.setObjectName("linkButton")
-        self._openFolder.setIcon(buildIcon("folderOpen", tokens.primary, 18))
         self._openFolder.clicked.connect(self.openFolderRequested)
         self.addBodyWidget(self._openFolder)
 

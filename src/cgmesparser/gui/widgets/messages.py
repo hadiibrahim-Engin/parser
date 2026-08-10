@@ -9,7 +9,6 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     QPersistentModelIndex,
-    QSize,
     QSortFilterProxyModel,
     Qt,
     Signal,
@@ -27,27 +26,18 @@ from PySide6.QtWidgets import (
 from cgmesparser.gui.core.result import LogRecord
 from cgmesparser.gui.core.settings import DEFAULT_LOG_ROWS
 from cgmesparser.gui.core.states import MessageLevel
-from cgmesparser.gui.resources.icons import icon as buildIcon
 from cgmesparser.gui.resources.tokens import TOKENS, Tokens
-from cgmesparser.gui.widgets.common import Card, scaledPixmap
+from cgmesparser.gui.widgets.common import Card
 
 _TIME_COLUMN = 0
-_ICON_COLUMN = 1
-_MESSAGE_COLUMN = 2
-_COLUMN_COUNT = 3
+_MESSAGE_COLUMN = 1
+_COLUMN_COUNT = 2
 
 _LEVEL_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 
 # Qt's model interface defaults these arguments to an invalid index. Building it
 # once at import time keeps that default out of the function signature.
 _NO_PARENT = QModelIndex()
-
-_ICON_FOR_LEVEL = {
-    MessageLevel.INFO: "info",
-    MessageLevel.WARNING: "warningTriangle",
-    MessageLevel.ERROR: "errorCircle",
-}
-
 
 def levelColour(level: MessageLevel, tokens: Tokens = TOKENS) -> str:
     return {
@@ -93,9 +83,6 @@ class MessageLogModel(QAbstractTableModel):
             if index.column() == _MESSAGE_COLUMN:
                 return record.message
             return None
-
-        if role == Qt.ItemDataRole.DecorationRole and index.column() == _ICON_COLUMN:
-            return scaledPixmap(_ICON_FOR_LEVEL[record.level], levelColour(record.level, self._tokens), 15)
 
         if role == Qt.ItemDataRole.ForegroundRole:
             if index.column() == _TIME_COLUMN:
@@ -187,12 +174,11 @@ class _LogView(QTableView):
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setAlternatingRowColors(False)
         self.setWordWrap(False)
-        self.setIconSize(QSize(15, 15))
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(24)
         self.horizontalHeader().setVisible(False)
         self.horizontalHeader().setStretchLastSection(True)
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(110)
 
     def setModel(self, model) -> None:
         super().setModel(model)
@@ -200,9 +186,7 @@ class _LogView(QTableView):
             return
         header = self.horizontalHeader()
         header.setSectionResizeMode(_TIME_COLUMN, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(_ICON_COLUMN, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(_MESSAGE_COLUMN, QHeaderView.ResizeMode.Stretch)
-        self.setColumnWidth(_ICON_COLUMN, 26)
         model.rowsInserted.connect(self._followTail)
 
     def _followTail(self) -> None:
@@ -224,14 +208,18 @@ class MessagesCard(Card):
         tokens: Tokens = TOKENS,
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__("Messages", badge="3", tokens=tokens, parent=parent)
+        super().__init__(
+            "Messages",
+            description="Validation feedback and conversion activity.",
+            tokens=tokens,
+            parent=parent,
+        )
         self._tokens = tokens
 
         self._model = MessageLogModel(maxRows, self)
 
         self._clear = QPushButton("Clear", self)
         self._clear.setObjectName("ghostButton")
-        self._clear.setIcon(buildIcon16("trash", tokens.textSecondary))
         self._clear.setMaximumWidth(110)
         self.headerLayout.addWidget(self._clear)
 
@@ -240,19 +228,17 @@ class MessagesCard(Card):
         self._tabs.tabBar().setExpanding(False)
 
         self._views: dict[MessageLevel | None, _LogView] = {}
-        for level, title, iconName, colour in (
-            (None, "Log", None, None),
-            (MessageLevel.WARNING, "Warnings", "warningTriangle", tokens.warning),
-            (MessageLevel.ERROR, "Errors", "errorCircle", tokens.error),
+        for level, title in (
+            (None, "Log"),
+            (MessageLevel.WARNING, "Warnings"),
+            (MessageLevel.ERROR, "Errors"),
         ):
             proxy = LevelFilterProxy(level, self)
             proxy.setSourceModel(self._model)
             view = _LogView(self)
             view.setModel(proxy)
             self._views[level] = view
-            index = self._tabs.addTab(view, title)
-            if iconName is not None and colour is not None:
-                self._tabs.setTabIcon(index, buildIcon16(iconName, colour))
+            self._tabs.addTab(view, title)
 
         self.addBodyWidget(self._tabs, 1)
 
@@ -301,7 +287,3 @@ class MessagesCard(Card):
         self._tabs.setTabText(0, "Log")
         self._tabs.setTabText(1, f"Warnings ({self._model.countFor(MessageLevel.WARNING)})")
         self._tabs.setTabText(2, f"Errors ({self._model.countFor(MessageLevel.ERROR)})")
-
-
-def buildIcon16(name: str, colour: str):
-    return buildIcon(name, colour, 16)

@@ -42,11 +42,12 @@ from cgmesparser.gui.widgets.output import OutputCard
 from cgmesparser.gui.widgets.processing import ProcessingCard
 from cgmesparser.gui.widgets.session import SessionInfoCard
 
-SUBTITLE = "CGMES / CIMLA processing and Excel export"
+SUBTITLE = "Convert CGMES datasets into validated Excel workbooks"
 
-_DEFAULT_SIZE = QSize(1440, 980)
-_MINIMUM_SIZE = QSize(1120, 760)
-_LEFT_COLUMN_MINIMUM = 720
+_DEFAULT_SIZE = QSize(1420, 980)
+_MINIMUM_SIZE = QSize(1100, 760)
+_LEFT_COLUMN_MINIMUM = 670
+_RIGHT_COLUMN_MINIMUM = 310
 
 
 class MainWindow(QMainWindow):
@@ -104,10 +105,11 @@ class MainWindow(QMainWindow):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         content = QWidget(scroll)
+        content.setObjectName("workspaceSurface")
         grid = QGridLayout(content)
-        grid.setContentsMargins(18, 18, 18, 18)
-        grid.setHorizontalSpacing(self._tokens.gridGap)
-        grid.setVerticalSpacing(self._tokens.gridGap)
+        grid.setContentsMargins(24, 22, 24, 22)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(16)
 
         self._inputs = InputSourcesCard(self._tokens, content)
         self._processing = ProcessingCard(self._tokens, content)
@@ -118,12 +120,21 @@ class MainWindow(QMainWindow):
         grid.addWidget(self._inputs, 0, 0)
         grid.addWidget(self._processing, 1, 0)
         grid.addWidget(self._messages, 2, 0)
-        grid.addWidget(self._output, 0, 1)
-        grid.addWidget(self._session, 1, 1)
 
-        grid.setColumnStretch(0, 7)
-        grid.setColumnStretch(1, 3)
+        rail = QWidget(content)
+        rail.setObjectName("contextRail")
+        railLayout = QVBoxLayout(rail)
+        railLayout.setContentsMargins(0, 0, 0, 0)
+        railLayout.setSpacing(16)
+        railLayout.addWidget(self._output)
+        railLayout.addWidget(self._session)
+        railLayout.addStretch(1)
+        grid.addWidget(rail, 0, 1, 3, 1)
+
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 0)
         grid.setColumnMinimumWidth(0, _LEFT_COLUMN_MINIMUM)
+        grid.setColumnMinimumWidth(1, _RIGHT_COLUMN_MINIMUM)
         grid.setRowStretch(2, 1)
 
         scroll.setWidget(content)

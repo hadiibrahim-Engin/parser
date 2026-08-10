@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+from PySide6.QtGui import QDropEvent
 
 from cgmesparser.gui.core.request import ConversionRequest
 from cgmesparser.gui.core.result import ConversionOutcome, LogRecord, StageUpdate
@@ -25,7 +27,12 @@ from cgmesparser.gui.core.validation import InputCheck, ValidationReport, valida
 from cgmesparser.gui.dialogs.preferences import PreferencesDialog
 from cgmesparser.gui.widgets.actionBar import ActionBar
 from cgmesparser.gui.widgets.common import EMPTY_VALUE
-from cgmesparser.gui.widgets.inputSources import InputSourcesCard, PathSelectorRow, ValidationStrip
+from cgmesparser.gui.widgets.inputSources import (
+    InputSourcesCard,
+    PathSelectorRow,
+    ValidationStrip,
+    droppedPath,
+)
 from cgmesparser.gui.widgets.messages import MessagesCard
 from cgmesparser.gui.widgets.output import OutputCard
 from cgmesparser.gui.widgets.processing import ProcessingCard, StageStepper
@@ -71,6 +78,122 @@ class TestPathSelectorRow:
         row.setEditable(False)
         assert row._edit.isEnabled() is False
         assert row._browse.isEnabled() is False
+
+
+def urlMimeData(*paths: Path) -> QMimeData:
+    data = QMimeData()
+    data.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
+    return data
+
+
+class TestDroppedPath:
+    """What a drop is understood to carry, decided in one place."""
+
+    def testASingleLocalFileIsTaken(self, tmp_path: Path) -> None:
+        target = tmp_path / "profile.zip"
+        target.write_bytes(b"PK\x05\x06")
+        assert droppedPath(urlMimeData(target)) == target
+
+    def testADirectoryIsTakenToo(self, tmp_path: Path) -> None:
+        assert droppedPath(urlMimeData(tmp_path)) == tmp_path
+
+    def testTheKindOfPathIsNotJudgedHere(self, tmp_path: Path) -> None:
+        # A folder dropped on the ZIP row is accepted and then reported by
+        # validateRequest as "Not a file". The rule lives there, not here.
+        assert droppedPath(urlMimeData(tmp_path)) is not None
+
+    def testAPathNeedNotExist(self, tmp_path: Path) -> None:
+        assert droppedPath(urlMimeData(tmp_path / "gone.zip")) is not None
+
+    def testSeveralPathsAreRefused(self, tmp_path: Path) -> None:
+        first, second = tmp_path / "a.zip", tmp_path / "b.zip"
+        assert droppedPath(urlMimeData(first, second)) is None
+
+    def testPlainTextIsRefused(self) -> None:
+        data = QMimeData()
+        data.setText("/data/profile.zip")
+        assert droppedPath(data) is None
+
+    def testARemoteUrlIsRefused(self) -> None:
+        data = QMimeData()
+        data.setUrls([QUrl("https://example.invalid/profile.zip")])
+        assert droppedPath(data) is None
+
+    def testEmptyMimeDataIsRefused(self) -> None:
+        assert droppedPath(QMimeData()) is None
+
+
+class TestPathSelectorRowDropping:
+    def dropOn(self, row: PathSelectorRow, data: QMimeData) -> QDropEvent:
+        event = QDropEvent(
+            QPointF(10.0, 10.0),
+            Qt.DropAction.CopyAction,
+            data,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        row.dropEvent(event)
+        return event
+
+    def testDroppingAPathAnnouncesIt(self, qtbot, tmp_path: Path) -> None:
+        row = PathSelectorRow(InputRole.PROFILE_ZIP)
+        qtbot.addWidget(row)
+        dropped = tmp_path / "profile.zip"
+        dropped.write_bytes(b"PK\x05\x06")
+
+        with qtbot.waitSignal(row.pathChanged, timeout=2000) as caught:
+            self.dropOn(row, urlMimeData(dropped))
+
+        assert caught.args[0] is InputRole.PROFILE_ZIP
+        assert caught.args[1] == dropped
+        assert row.path() == dropped
+
+    def testDroppingShowsThePathInTheField(self, qtbot, tmp_path: Path) -> None:
+        row = PathSelectorRow(InputRole.OUTPUT_DIRECTORY)
+        qtbot.addWidget(row)
+        self.dropOn(row, urlMimeData(tmp_path))
+        assert row._edit.text() == str(tmp_path)
+
+    def testADisabledRowRefusesDrops(self, qtbot, tmp_path: Path) -> None:
+        row = PathSelectorRow(InputRole.PROFILE_ZIP)
+        qtbot.addWidget(row)
+        row.setEditable(False)
+        with qtbot.assertNotEmitted(row.pathChanged):
+            event = self.dropOn(row, urlMimeData(tmp_path / "profile.zip"))
+        assert event.isAccepted() is False
+
+    def testAnUnusableDropIsRefused(self, qtbot) -> None:
+        row = PathSelectorRow(InputRole.PROFILE_ZIP)
+        qtbot.addWidget(row)
+        data = QMimeData()
+        data.setText("not a url")
+        with qtbot.assertNotEmitted(row.pathChanged):
+            self.dropOn(row, data)
+
+    def testTheFieldHighlightsWhileADragHovers(self, qtbot, tmp_path: Path) -> None:
+        row = PathSelectorRow(InputRole.SNAPSHOT_DATASET)
+        qtbot.addWidget(row)
+        assert row._edit.property("dropActive") in (None, "false")
+
+        row._setDropActive(True)
+        assert row._edit.property("dropActive") == "true"
+
+        row._setDropActive(False)
+        assert row._edit.property("dropActive") == "false"
+
+    def testTheHighlightIsClearedByTheDropItself(self, qtbot, tmp_path: Path) -> None:
+        row = PathSelectorRow(InputRole.SNAPSHOT_DATASET)
+        qtbot.addWidget(row)
+        row._setDropActive(True)
+        self.dropOn(row, urlMimeData(tmp_path))
+        assert row._edit.property("dropActive") == "false"
+
+    def testTheRowAcceptsDropsButTheFieldDoesNot(self, qtbot) -> None:
+        # The line edit would otherwise swallow the drop and paste the URL.
+        row = PathSelectorRow(InputRole.PROFILE_ZIP)
+        qtbot.addWidget(row)
+        assert row.acceptDrops() is True
+        assert row._edit.acceptDrops() is False
 
 
 class TestValidationStrip:

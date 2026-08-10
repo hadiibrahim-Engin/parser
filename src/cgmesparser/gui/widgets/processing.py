@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QWidget
 
 from cgmesparser.gui.core.result import StageUpdate
 from cgmesparser.gui.core.states import ORDERED_STAGES, ProcessingStage, StageState
@@ -234,7 +234,12 @@ class ProcessingCard(Card):
     """Card 2: stepper, progress bar and the one-line status."""
 
     def __init__(self, tokens: Tokens = TOKENS, parent: QWidget | None = None) -> None:
-        super().__init__("Processing", badge="2", tokens=tokens, parent=parent)
+        super().__init__(
+            "Processing",
+            description="Track validation, conversion, and export from one place.",
+            tokens=tokens,
+            parent=parent,
+        )
         self._tokens = tokens
 
         self._stepper = StageStepper(tokens, self)
@@ -258,12 +263,13 @@ class ProcessingCard(Card):
         progressLayout.addWidget(self._progressLabel)
         self.addBodyWidget(progressRow)
 
-        statusRow = QWidget(self)
+        statusRow = QFrame(self)
+        statusRow.setObjectName("processingStatus")
         statusLayout = QHBoxLayout(statusRow)
-        statusLayout.setContentsMargins(0, 0, 0, 0)
+        statusLayout.setContentsMargins(12, 8, 12, 8)
         statusLayout.setSpacing(8)
 
-        caption = QLabel("Status:", statusRow)
+        caption = QLabel("CURRENT STATUS", statusRow)
         caption.setObjectName("statusCaption")
         statusLayout.addWidget(caption)
 

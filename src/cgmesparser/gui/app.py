@@ -14,14 +14,12 @@ from collections.abc import Sequence
 
 from PySide6 import __version__ as PYSIDE_VERSION
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from cgmesparser.gui.controller.conversion import ConversionController
 from cgmesparser.gui.core.session import SessionInfo
 from cgmesparser.gui.core.states import MessageLevel
 from cgmesparser.gui.mainWindow import MainWindow
-from cgmesparser.gui.resources.icons import icon as buildIcon
 from cgmesparser.gui.resources.theme import buildStylesheet
 from cgmesparser.gui.resources.tokens import TOKENS
 from cgmesparser.gui.services.protocol import ConversionService
@@ -53,7 +51,6 @@ def createApplication(argv: Sequence[str] | None = None) -> QApplication:
     application.setApplicationDisplayName(APPLICATION_NAME)
     application.setOrganizationName(ORGANISATION_NAME)
     application.setApplicationVersion(__version__)
-    application.setWindowIcon(_applicationIcon())
     application.setStyle("Fusion")
     application.setStyleSheet(buildStylesheet(TOKENS))
     return application
@@ -118,11 +115,5 @@ def _demoBanner():
     from cgmesparser.gui.services.demo import DEMO_BANNER
 
     return LogRecord.now(MessageLevel.WARNING, DEMO_BANNER)
-
-
-def _applicationIcon() -> QIcon:
-    return buildIcon("tower", TOKENS.primary, 64)
-
-
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())

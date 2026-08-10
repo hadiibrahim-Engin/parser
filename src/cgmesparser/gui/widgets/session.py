@@ -17,14 +17,19 @@ class SessionInfoCard(Card):
     """
 
     def __init__(self, tokens: Tokens = TOKENS, parent: QWidget | None = None) -> None:
-        super().__init__("Session Info", iconName="info", accentTitle=True, tokens=tokens, parent=parent)
+        super().__init__(
+            "Session",
+            description="Environment details for support and diagnostics.",
+            tokens=tokens,
+            parent=parent,
+        )
 
         self._rows = {
-            "sessionId": KeyValueRow("Session ID", None, None, 120, tokens, self),
-            "user": KeyValueRow("User", None, None, 120, tokens, self),
-            "computer": KeyValueRow("Computer", None, None, 120, tokens, self),
-            "pythonVersion": KeyValueRow("Python", None, None, 120, tokens, self),
-            "pysideVersion": KeyValueRow("PySide6", None, None, 120, tokens, self),
+            "sessionId": KeyValueRow("Session ID", 120, tokens, self),
+            "user": KeyValueRow("User", 120, tokens, self),
+            "computer": KeyValueRow("Computer", 120, tokens, self),
+            "pythonVersion": KeyValueRow("Python", 120, tokens, self),
+            "pysideVersion": KeyValueRow("PySide6", 120, tokens, self),
         }
         for row in self._rows.values():
             self.addBodyWidget(row)

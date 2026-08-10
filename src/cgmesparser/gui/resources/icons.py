@@ -15,8 +15,10 @@ from PySide6.QtSvg import QSvgRenderer
 
 _COLOUR_PLACEHOLDER = "__C__"
 
+# 2.0 on a 24-unit viewBox is the weight Feather/Lucide settle on: at the 15-20px
+# these are drawn at, a lighter stroke lands on half-pixel boundaries and blurs.
 _STROKE = (
-    'fill="none" stroke="__C__" stroke-width="1.7" '
+    'fill="none" stroke="__C__" stroke-width="2" '
     'stroke-linecap="round" stroke-linejoin="round"'
 )
 
@@ -41,23 +43,29 @@ _ICONS: dict[str, str] = {
     "folderOpen": f"""<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g {_STROKE}>
         <path d="M3 8V6.4a2 2 0 0 1 2-2h3.4l2 2.2H18a2 2 0 0 1 2 2V10"/>
         <path d="M3.4 10h17.2l-2.1 8.2a1.6 1.6 0 0 1-1.6 1.2H5.7a1.6 1.6 0 0 1-1.6-1.2z"/></g></svg>""",
-    # --- status, drawn filled so they read at 16px ----------------------------
+    # --- status ---------------------------------------------------------------
+    # Drawn filled, with a deliberately heavy (2.8) white knockout. These are
+    # used as small as 16px, where a 2.0 stroke lands on ~1.3 device pixels and
+    # antialiases into a smear - the glyph stops reading as a tick or a cross
+    # and becomes a blob. The knockout is also inset from the rim so it keeps a
+    # clean margin of colour at any size.
     "checkCircle": """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <circle cx="12" cy="12" r="10" fill="__C__"/>
-        <path d="M7.6 12.4l2.9 2.9 5.9-6" fill="none" stroke="#FFFFFF" stroke-width="2"
+        <path d="M7.9 12.3l2.7 2.7 5.5-5.7" fill="none" stroke="#FFFFFF" stroke-width="2.8"
         stroke-linecap="round" stroke-linejoin="round"/></svg>""",
     "warningTriangle": """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 3.2 22 20H2z" fill="__C__"/>
-        <path d="M12 9.6v4.2" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
-        <circle cx="12" cy="17" r="1.15" fill="#FFFFFF"/></svg>""",
+        <path d="M12.9 3.6l8.9 15.2a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5l8.9-15.2a1 1 0 0 1 1.8 0z"
+        fill="__C__"/>
+        <path d="M12 9.4v4" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round"/>
+        <circle cx="12" cy="16.9" r="1.4" fill="#FFFFFF"/></svg>""",
     "errorCircle": """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <circle cx="12" cy="12" r="10" fill="__C__"/>
-        <path d="M8.9 8.9l6.2 6.2M15.1 8.9l-6.2 6.2" stroke="#FFFFFF" stroke-width="2"
+        <path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6" stroke="#FFFFFF" stroke-width="2.8"
         stroke-linecap="round"/></svg>""",
     "info": """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <circle cx="12" cy="12" r="10" fill="__C__"/>
-        <circle cx="12" cy="7.9" r="1.2" fill="#FFFFFF"/>
-        <path d="M12 11.2v5.4" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/></svg>""",
+        <circle cx="12" cy="7.7" r="1.5" fill="#FFFFFF"/>
+        <path d="M12 11.1v5.2" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round"/></svg>""",
     # --- output summary ------------------------------------------------------
     "excel": f"""<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g {_STROKE}>
         <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
@@ -133,10 +141,13 @@ def iconPixmap(name: str, colour: str, size: int = 20, ratio: float = 1.0) -> QP
 def icon(name: str, colour: str, size: int = 20) -> QIcon:
     """A QIcon for ``name`` in ``colour``.
 
-    Two device pixel ratios are baked in so the icon stays sharp when the window
-    moves between a standard and a high-DPI display.
+    Three physical resolutions are added so the icon stays sharp from a 1x
+    display up to 3x. They are added at device pixel ratio 1.0 and differing
+    pixel sizes on purpose: QIcon indexes what it stores by *logical* size, so
+    adding the same logical size at several ratios would just overwrite the
+    previous entry and leave one resolution behind.
     """
     result = QIcon()
-    for ratio in (1.0, 2.0):
-        result.addPixmap(iconPixmap(name, colour, size, ratio))
+    for ratio in (1.0, 2.0, 3.0):
+        result.addPixmap(iconPixmap(name, colour, int(round(size * ratio)), 1.0))
     return result
