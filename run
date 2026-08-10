@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Runs the CLI straight from the venv — no `uv run` involved.
-# uv is only for `uv sync` (create venv, install deps). Use this to execute.
-set -euo pipefail
-exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.venv/bin/cgmes2excel" "$@"
