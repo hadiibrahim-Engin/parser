@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 *.egg-info/
 .eggs/
+
+# Build output. releases/ is deliberately NOT ignored: built executables are
+# committed there by the release pipeline.
 build/
 dist/
 
@@ -16,6 +19,7 @@ dist/
 .coverage
 .coverage.*
 htmlcov/
+junit/
 .mypy_cache/
 .ruff_cache/
 
