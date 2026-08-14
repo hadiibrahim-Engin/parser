@@ -1,4 +1,4 @@
-"""Tests der Netzelement-Transformation (Fälle 11-18)."""
+"""Tests for the network element transformation (cases 11-18)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from excelToCsv.errors import ConversionError
 
 
 def twoStations() -> list[dict[str, object]]:
-    """Zwei reale Stationen, auf die Netzelemente verweisen können."""
+    """Two real stations that network elements can reference."""
     return [
         stationRow(**{"ELEMENT ID": "Berlin_380", "UCTE CODE": "DBERLIN1"}),
         stationRow(
@@ -27,7 +27,7 @@ def twoStations() -> list[dict[str, object]]:
 
 
 def testLineWithTwoValidStations(logger: logging.Logger) -> None:
-    """Fall 11: LINE mit zwei gültigen Stationen."""
+    """Case 11: LINE with two valid stations."""
     result = convertRows([*twoStations(), elementRow()], logger)
 
     assert len(result.networkElements) == 1
@@ -52,10 +52,10 @@ def testLineWithTwoValidStations(logger: logging.Logger) -> None:
 @pytest.mark.parametrize(
     ("elementType", "missingColumn"),
     [
-        ("LINE", "Station 2"),  # Fall 12
-        ("TRA", "Station 1"),  # Fall 13
-        ("TIE", "Station 2"),  # Fall 14
-        ("DCL", "Station 1"),  # Fall 15
+        ("LINE", "Station 2"),  # case 12
+        ("TRA", "Station 1"),  # case 13
+        ("TIE", "Station 2"),  # case 14
+        ("DCL", "Station 1"),  # case 15
     ],
 )
 def testMissingMandatoryStationReferenceIsFatal(
@@ -64,7 +64,7 @@ def testMissingMandatoryStationReferenceIsFatal(
     logger: logging.Logger,
     logCapture: RecordingHandler,
 ) -> None:
-    """Fälle 12-15: Pflichttypen ohne Stationsreferenz brechen ab."""
+    """Cases 12-15: mandatory types without a station reference abort."""
     row = elementRow(**{"ELEMENT-TYPE": elementType, missingColumn: ""})
     with pytest.raises(ConversionError):
         convertRows([*twoStations(), row], logger)
@@ -79,7 +79,7 @@ def testMissingMandatoryStationReferenceIsFatal(
 def testOptionalStationReferenceBecomesNaN(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Fall 16: GEN ohne Station 2 -> Literal NaN plus Warning."""
+    """Case 16: GEN without Station 2 -> literal NaN plus a warning."""
     row = elementRow(
         **{"ELEMENT ID": "GEN_42", "ELEMENT-TYPE": "GEN", "Station 2": ""}
     )
@@ -111,7 +111,7 @@ def testAllOptionalTypesTolerateMissingStations(
 def testUnknownStationReferenceIsFatal(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Fall 17: Referenz auf nicht vorhandene SUB-Station."""
+    """Case 17: reference to a SUB station that does not exist."""
     row = elementRow(**{"Station 1": "HRA_380", "Station 2": "ABC_380"})
     with pytest.raises(ConversionError):
         convertRows([*twoStations(), row], logger)
@@ -125,7 +125,7 @@ def testUnknownStationReferenceIsFatal(
 def testUnknownElementTypeIsFatal(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Fall 18: unbekannter ELEMENT-TYPE."""
+    """Case 18: unknown ELEMENT-TYPE."""
     row = elementRow(**{"ELEMENT ID": "ABC", "ELEMENT-TYPE": "XYZ"})
     with pytest.raises(ConversionError):
         convertRows([*twoStations(), row], logger)
@@ -171,6 +171,6 @@ def testConflictingDuplicateElementsAreFatal(logger: logging.Logger) -> None:
 
 
 def testNetworkElementsResolveStationsRegardlessOfRowOrder(logger: logging.Logger) -> None:
-    """Stationen dürfen im Excel nach den Netzelementen stehen."""
+    """Stations may appear after the network elements in the spreadsheet."""
     result = convertRows([elementRow(), *twoStations()], logger)
     assert result.networkElements.iloc[0]["Station Anfang"] == "Berlin_380"

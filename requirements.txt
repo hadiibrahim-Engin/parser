@@ -3,5 +3,5 @@ openpyxl>=3.1
 colorlog>=6.7
 pytest>=7.4
 
-# Optional: rein für Geschwindigkeit. Ohne dieses Paket läuft alles über openpyxl.
+# Optional: purely for speed. Without it everything runs through openpyxl.
 python-calamine>=0.2

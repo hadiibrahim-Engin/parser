@@ -1,4 +1,4 @@
-"""Converter: Excel-Netzinventar -> ``Stationen.csv`` + ``Netzelemente.csv``."""
+"""Converter: Excel network inventory -> ``Stationen.csv`` + ``Netzelemente.csv``."""
 
 from __future__ import annotations
 

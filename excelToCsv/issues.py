@@ -1,11 +1,10 @@
-"""Einsammeln und Formatieren von fachlichen Befunden (Errors / Warnings).
+"""Collecting and formatting business findings (errors / warnings).
 
-Zentrale Fehlerstrategie:
+The central error strategy:
 
-* ``WARNING`` – fachlich tolerierbar, die Conversion läuft weiter.
-* ``ERROR``   – IMMER fatal. Es werden alle Fehler einer Phase eingesammelt und
-  vollständig geloggt, danach bricht die Conversion ab, BEVOR irgendeine
-  CSV-Datei entsteht.
+* ``WARNING`` - tolerable, the conversion carries on.
+* ``ERROR``   - ALWAYS fatal. Every error of a phase is collected and logged in
+  full, then the conversion aborts BEFORE any CSV file comes into existence.
 """
 
 from __future__ import annotations
@@ -15,12 +14,12 @@ from dataclasses import dataclass, field
 
 from excelToCsv.errors import ConversionError
 
-#: Darstellung eines leeren Wertes in Log-Meldungen.
+#: How an empty value is rendered in log messages.
 EMPTY_DISPLAY = "<empty>"
 
 
 def formatValue(value: object) -> str:
-    """Stellt einen Zellwert für Log-Ausgaben dar; leere Werte als ``<empty>``."""
+    """Render a cell value for log output; empty values become ``<empty>``."""
     if value is None:
         return EMPTY_DISPLAY
     text = str(value).strip()
@@ -29,7 +28,7 @@ def formatValue(value: object) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Issue:
-    """Ein einzelner Befund mit vollem Kontext zur Rückverfolgung ins Excel."""
+    """A single finding with the full context needed to trace it back to Excel."""
 
     problem: str
     row: int | None = None
@@ -41,7 +40,7 @@ class Issue:
     action: str = ""
 
     def render(self, headline: str) -> str:
-        """Baut den mehrzeiligen Log-Block dieses Befundes."""
+        """Build the multi-line log block for this finding."""
         lines = [headline]
         if self.row is not None:
             lines.append(f"Row: {self.row}")
@@ -62,12 +61,12 @@ class Issue:
 
 @dataclass(slots=True)
 class IssueCollector:
-    """Sammelt Fehler und Warnungen und erzwingt den Abbruch an Phasengrenzen.
+    """Collect errors and warnings and force the abort at phase boundaries.
 
-    Fehler werden sofort geloggt (damit der Anwender sie live sieht), aber erst
-    an einer definierten Phasengrenze via :meth:`abortIfFailed` in einen
-    :class:`ConversionError` überführt. So sieht der Anwender in einem Lauf
-    ALLE Probleme statt nur des ersten.
+    Errors are logged immediately (so the user sees them live) but only turned
+    into a :class:`ConversionError` at a defined phase boundary via
+    :meth:`abortIfFailed`. That way one run surfaces ALL problems instead of
+    just the first.
     """
 
     logger: logging.Logger
@@ -76,10 +75,10 @@ class IssueCollector:
     maxLoggedErrors: int = 200
 
     def error(self, problem: str, **context: object) -> None:
-        """Erfasst einen fatalen Befund und loggt ihn sofort.
+        """Record a fatal finding and log it immediately.
 
-        ``stacklevel=2`` sorgt dafür, dass die Quellenangabe im Log auf das
-        aufrufende Fachmodul zeigt (z. B. ``stations.py``) statt auf diese Datei.
+        ``stacklevel=2`` makes the source location in the log point at the
+        calling domain module (e.g. ``stations.py``) instead of this file.
         """
         issue = Issue(problem=problem, **context)  # type: ignore[arg-type]
         self.errors.append(issue)
@@ -93,18 +92,18 @@ class IssueCollector:
             )
 
     def warning(self, problem: str, **context: object) -> None:
-        """Erfasst einen tolerierbaren Befund und loggt ihn sofort."""
+        """Record a tolerable finding and log it immediately."""
         issue = Issue(problem=problem, **context)  # type: ignore[arg-type]
         self.warnings.append(issue)
         self.logger.warning(issue.render("Tolerable issue."), stacklevel=2)
 
     @property
     def failed(self) -> bool:
-        """``True``, sobald mindestens ein fataler Fehler erfasst wurde."""
+        """``True`` as soon as at least one fatal error has been recorded."""
         return bool(self.errors)
 
     def abortIfFailed(self, phase: str) -> None:
-        """Bricht die Conversion ab, wenn in dieser Phase Fehler auftraten."""
+        """Abort the conversion when this phase produced any error."""
         if not self.errors:
             return
         count = len(self.errors)

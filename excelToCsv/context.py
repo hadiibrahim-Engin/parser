@@ -1,4 +1,4 @@
-"""Gemeinsame Datenstrukturen der Transformationsschritte."""
+"""Data structures shared by the transformation steps."""
 
 from __future__ import annotations
 
@@ -14,11 +14,10 @@ from excelToCsv.relevance import RelevanceColumn
 
 @dataclass(slots=True)
 class RowSet:
-    """Eine Teilmenge der Inputzeilen samt vorberechnetem Zeilenkontext.
+    """A subset of the input rows plus pre-computed row context.
 
-    Zeilennummer, ELEMENT ID und ELEMENT-TYPE werden einmal berechnet und
-    weitergereicht, damit jede Fehlermeldung ohne erneutes Nachschlagen
-    vollständig ist.
+    Row number, ELEMENT ID and ELEMENT-TYPE are computed once and passed along,
+    so every message is complete without another lookup.
     """
 
     frame: pd.DataFrame
@@ -30,7 +29,7 @@ class RowSet:
         return len(self.frame)
 
     def context(self, position: int) -> dict[str, object]:
-        """Liefert den Log-Kontext (Zeile, ID, Typ) für eine Position."""
+        """Return the log context (row, id, type) for one position."""
         return {
             "row": int(self.rowNumbers[position]),
             "elementId": self.elementIds[position],
@@ -40,7 +39,7 @@ class RowSet:
 
 @dataclass(slots=True)
 class ConversionContext:
-    """Querschnittsobjekte, die alle Transformationsschritte benötigen."""
+    """Cross-cutting objects that every transformation step needs."""
 
     relevanceColumns: list[RelevanceColumn]
     collector: IssueCollector
@@ -48,7 +47,7 @@ class ConversionContext:
 
 
 def subsetRows(rows: RowSet, mask: np.ndarray) -> RowSet:
-    """Schneidet eine Teilmenge aus einem ``RowSet`` heraus (Maske über Zeilen)."""
+    """Cut a subset out of a ``RowSet`` using a row mask."""
     return RowSet(
         frame=rows.frame.loc[mask].reset_index(drop=True),
         rowNumbers=rows.rowNumbers[mask],
@@ -58,5 +57,5 @@ def subsetRows(rows: RowSet, mask: np.ndarray) -> RowSet:
 
 
 def emptyColumn(rowCount: int) -> np.ndarray:
-    """Erzeugt eine Spalte aus leeren Strings (Felder ohne definierte Quelle)."""
+    """Build a column of empty strings (fields without a defined source)."""
     return np.full(rowCount, "", dtype=object)

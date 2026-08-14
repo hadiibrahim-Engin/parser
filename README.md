@@ -488,6 +488,57 @@ row, real or virtual. Missing, non-numeric or out-of-range values are fatal.
 If a value contains both `.` and `,` the **last** separator is treated as the decimal
 separator and a `WARNING` is logged.
 
+#### Repairing a forgotten decimal separator
+
+A coordinate typed without its separator — `52459373` instead of `52.459373` — is
+repaired automatically and reported as a `WARNING`:
+
+```
+WARNING  stations.py:106        Tolerable issue.
+         Row: 3
+         ELEMENT ID: Berlin_220
+         ELEMENT-TYPE: SUB
+         Field: Latitude
+         Value: 52517037
+         Problem: Coordinate had no decimal separator - it was reinserted using the
+                  6-decimal precision of this column (52517037 -> 52.517037).
+         Expected: A decimal number using '.' or ',' as decimal separator.
+         Action: Writing the corrected value 52.517037 and continuing.
+```
+
+The position of the separator **cannot be derived from the number itself**: `13361402` is
+equally consistent with `13.361402` and `133.61402`, and both are valid longitudes. Picking
+"the largest integer part that fits the range" would silently produce `133.61402` — a
+plausible but wrong value, exactly the kind of silent corruption this converter exists to
+prevent.
+
+The precision is therefore taken from the column's own intact values:
+
+```mermaid
+flowchart TD
+    A["Pass 1: normalize the whole column"] --> B["Record the decimal precision of every well-formed value"]
+    B --> C["Pass 2: retry only the failures"]
+    C --> D{"Is there precision evidence?"}
+    D -->|no| E["Fatal error: separator cannot be restored"]
+    D -->|yes| F["Reinsert the separator that many digits from the right"]
+    F --> G{"Result inside the valid range?"}
+    G -->|no| E
+    G -->|yes| H["Use the repaired value, log a WARNING"]
+```
+
+Guard rails, so the repair never invents data:
+
+| Situation | Behaviour |
+| --- | --- |
+| Value in range without a separator (`52`) | Left untouched — a legitimate coordinate |
+| Out of range **with** a separator (`152.5`) | Fatal — a genuine data error, never reinterpreted |
+| No intact value in the column | Fatal — the precision is unknown, so nothing is guessed |
+| Fewer digits than the precision (`524` at 6 decimals) | Fatal — would fabricate a near-zero value |
+| Still out of range after the repair | Fatal |
+| Non-digit characters | Fatal |
+
+The dominant precision wins; on a tie the higher precision is used so no digit is lost.
+
 ### Dates
 
 `STARTLIFETIME → IBN`, `ENDLIFETIME → ABN`, always `DD.MM.YYYY`.
@@ -574,17 +625,17 @@ TennetD,Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 .venv/bin/python -m pytest
 ```
 
-**151 tests**, including all 25 cases required by the specification.
+**182 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |
-| `tests/testNormalize.py` | Voltage (6, 7), coordinates (5), dates (9, 10), booleans (19–21) |
+| `tests/testNormalize.py` | Voltage (6, 7), coordinates (5), forgotten separators, dates (9, 10), booleans (19–21) |
 | `tests/testStations.py` | Real/virtual station (1, 2), missing coordinates (3, 4), voltage JSON (8), duplicates (22) |
 | `tests/testNetworkElements.py` | LINE/TRA/TIE/DCL (11–15), GEN → `NaN` (16), unknown reference (17), unknown type (18) |
 | `tests/testRelevance.py` | `relevant für` from 0/1 and True/False (19–21), ignored columns |
 | `tests/testOutput.py` | Exact header order (23, 24), no CSVs on fatal error (25), CLI, engine equality |
 | `tests/testHeaderDetection.py` | Header in row 5, real Excel row numbers, `--header-row`, missing header |
-| `tests/testLogging.py` | Block indentation, blank-line separation, source location |
+| `tests/testLogging.py` | Block indentation, blank-line separation, source location, `--debug-file` |
 
 The header order tests parse the header line **from the specification text** and compare it
 against `schema.py`, so a typo in either side fails the build.
@@ -632,6 +683,7 @@ Where the specification left a gap, the choice was made explicit rather than sil
 | Station id without `_` | Warning, whole id used as the name | Better than guessing a voltage level |
 | Empty `VOLTAGE-LEVEL` on a station | `[]` | The honest JSON representation of "no voltages" |
 | Coordinate with both `.` and `,` | Last separator wins, warning | Deterministic and visible |
+| Coordinate without any separator | Repaired from the column's precision, warning | Forgotten separators are common; guessing the position is not |
 | Duplicate column names | Fatal | The mapping would be ambiguous |
 | Errors within a phase | All collected, then abort | One run shows every problem |
 | CSV quoting | Minimal by default | RFC 4180 round-trips exactly; `--quote-all` available |

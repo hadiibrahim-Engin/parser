@@ -1,13 +1,15 @@
-"""Unit Tests der reinen Normalisierungsfunktionen."""
+"""Unit tests for the pure normalization functions."""
 
 from __future__ import annotations
 
 import datetime as dt
+from collections import Counter
 
 import pytest
 
 from excelToCsv.errors import NormalizationError
 from excelToCsv.normalize import (
+    decimalPlaceCount,
     isVirtualStation,
     normalizeCoordinate,
     normalizeDate,
@@ -20,10 +22,11 @@ from excelToCsv.normalize import (
     splitStationId,
     splitVoltages,
 )
+from excelToCsv.stations import dominantDecimalPlaces
 
 
 # --------------------------------------------------------------------------- #
-# Spannung (Fall 6, 7)
+# Voltage (cases 6, 7)
 # --------------------------------------------------------------------------- #
 
 
@@ -61,7 +64,7 @@ def testSplitVoltagesReturnsSingleValues() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Koordinaten (Fall 5)
+# Coordinates (case 5)
 # --------------------------------------------------------------------------- #
 
 
@@ -77,7 +80,9 @@ def testSplitVoltagesReturnsSingleValues() -> None:
     ],
 )
 def testNormalizeLatitudeAcceptsDecimalComma(value: object, expected: str) -> None:
-    assert normalizeLatitude(value) == expected
+    result = normalizeLatitude(value)
+    assert result.text == expected
+    assert result.repair == "", "a well-formed value needs no repair"
 
 
 def testNormalizeLatitudeRejectsOutOfRange() -> None:
@@ -101,15 +106,99 @@ def testNormalizeCoordinateRejectsEmpty() -> None:
 
 
 def testNormalizeCoordinateResolvesAmbiguousSeparators() -> None:
-    """Punkt UND Komma: der letzte Separator gilt als Dezimaltrenner."""
-    ambiguous: list[str] = []
-    result = normalizeCoordinate("1.234,56", limits=(-2000.0, 2000.0), ambiguous=ambiguous)
-    assert result == "1234.56"
-    assert ambiguous == ["1.234,56"]
+    """Dot AND comma: the last separator counts as the decimal separator."""
+    result = normalizeCoordinate("1.234,56", limits=(-2000.0, 2000.0))
+    assert result.text == "1234.56"
+    assert "both '.' and ','" in result.repair
 
 
 # --------------------------------------------------------------------------- #
-# Datum (Fall 9, 10)
+# Missing decimal separator
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("value", "decimals", "expected"),
+    [
+        ("52459373", 6, "52.459373"),
+        (52459373, 6, "52.459373"),
+        ("-52459373", 6, "-52.459373"),
+        ("5245937", 5, "52.45937"),
+        ("899999", 4, "89.9999"),
+    ],
+)
+def testMissingSeparatorIsRepairedForLatitude(
+    value: object, decimals: int, expected: str
+) -> None:
+    result = normalizeLatitude(value, decimals)
+    assert result.text == expected
+    assert "no decimal separator" in result.repair
+
+
+def testMissingSeparatorUsesTheGivenPrecisionNotTheWidestFit() -> None:
+    """13361402 is 13.361402 at 6 decimals - never the equally valid 133.61402."""
+    assert normalizeLongitude("13361402", 6).text == "13.361402"
+    assert normalizeLongitude("13361402", 5).text == "133.61402"
+
+
+def testMissingSeparatorIsFatalWithoutPrecisionEvidence() -> None:
+    with pytest.raises(NormalizationError) as excinfo:
+        normalizeLatitude("52459373")
+    assert "decimal separator appears to be missing" in str(excinfo.value)
+
+
+def testValueInRangeIsNeverRepaired() -> None:
+    """A whole number inside the valid range is a legitimate coordinate."""
+    result = normalizeLatitude(52, 6)
+    assert result.text == "52"
+    assert result.repair == ""
+
+
+def testOutOfRangeWithSeparatorStaysFatal() -> None:
+    """A real out-of-range error must not be disguised as a missing separator."""
+    with pytest.raises(NormalizationError) as excinfo:
+        normalizeLatitude("152.5", 6)
+    assert "out of range" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("value", "decimals"),
+    [
+        ("524", 6),  # fewer digits than decimals -> would fabricate a near-zero value
+        ("52459373", 0),  # no usable precision
+        ("999999999999", 2),  # still out of range after the repair
+        ("52a459373", 6),  # not a pure digit sequence
+    ],
+)
+def testUnrepairableValuesStayFatal(value: str, decimals: int) -> None:
+    with pytest.raises(NormalizationError):
+        normalizeLatitude(value, decimals)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("52.459373", 6), ("52.45", 2), ("52", 0), ("-9.1", 1)],
+)
+def testDecimalPlaceCount(text: str, expected: int) -> None:
+    assert decimalPlaceCount(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("counts", "expected"),
+    [
+        ({6: 10, 5: 2}, 6),
+        ({0: 99, 4: 1}, 4),  # whole numbers are no evidence of precision
+        ({5: 3, 6: 3}, 6),  # tie -> keep the higher precision
+        ({}, None),
+        ({0: 5}, None),
+    ],
+)
+def testDominantDecimalPlaces(counts: dict[int, int], expected: int | None) -> None:
+    assert dominantDecimalPlaces(Counter(counts)) == expected
+
+
+# --------------------------------------------------------------------------- #
+# Dates (cases 9, 10)
 # --------------------------------------------------------------------------- #
 
 
@@ -123,7 +212,7 @@ def testNormalizeCoordinateResolvesAmbiguousSeparators() -> None:
         ("2025-05-09T00:00:00", "09.05.2025"),
         (dt.datetime(2025, 5, 9), "09.05.2025"),
         (dt.date(2025, 5, 9), "09.05.2025"),
-        (45786, "09.05.2025"),  # Excel-Seriennummer
+        (45786, "09.05.2025"),  # Excel serial number
         ("", ""),
         (None, ""),
     ],
@@ -139,7 +228,7 @@ def testNormalizeDateRejectsUnparsableValues(value: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Boolean (Fall 19-21)
+# Booleans (cases 19-21)
 # --------------------------------------------------------------------------- #
 
 
@@ -159,7 +248,7 @@ def testParseBooleanReturnsNoneForUnknownValues(value: object) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Text / ELEMENT-TYPE / Stationskennung
+# Text / ELEMENT-TYPE / station identifiers
 # --------------------------------------------------------------------------- #
 
 

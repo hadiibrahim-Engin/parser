@@ -25,15 +25,15 @@ from typing import Final
 
 LOGGER_NAME: Final = "excelToCsv"
 
-#: Breite der Quellenangabe (``reader.py:120``) in der Log-Zeile.
+#: Width of the source location (``reader.py:120``) inside the log line.
 LOCATION_WIDTH: Final = 22
 
-#: ``%(levelname)-8s`` plus Trennzeichen – Folgezeilen richten sich daran aus.
+#: ``%(levelname)-8s`` plus separator - continuation lines align with it.
 CONTINUATION_INDENT: Final = " " * 9
 
 _LOG_FORMAT: Final = f"%(levelname)-8s %(location)-{LOCATION_WIDTH}s %(message)s"
 
-#: Farbnamen je Level (colorlog-Schreibweise).
+#: Color names per level (colorlog notation).
 _COLOR_NAMES: Final[dict[int, str]] = {
     logging.DEBUG: "thin_white",
     logging.INFO: "green",
@@ -42,7 +42,7 @@ _COLOR_NAMES: Final[dict[int, str]] = {
     logging.CRITICAL: "bold_white,bg_red",
 }
 
-#: ANSI-Fallback je Level, falls ``colorlog`` fehlt.
+#: ANSI fallback per level, used when ``colorlog`` is unavailable.
 _ANSI_COLORS: Final[dict[int, str]] = {
     logging.DEBUG: "\033[2;37m",
     logging.INFO: "\033[32m",
@@ -52,23 +52,23 @@ _ANSI_COLORS: Final[dict[int, str]] = {
 }
 _ANSI_RESET: Final = "\033[0m"
 
-#: Signatur einer Einfärbefunktion: (Level, Text) -> eingefärbter Text.
+#: Signature of a colorizing function: (level, text) -> colorized text.
 Colorizer = Callable[[int, str], str]
 
 
 def plainColorizer(level: int, text: str) -> str:
-    """Gibt den Text unverändert zurück (Farbe abgeschaltet)."""
+    """Return the text unchanged (colors disabled)."""
     return text
 
 
 def ansiColorizer(level: int, text: str) -> str:
-    """Färbt den Text mit einer minimalen, eingebauten ANSI-Palette ein."""
+    """Colorize the text using a minimal, built-in ANSI palette."""
     color = _ANSI_COLORS.get(level)
     return f"{color}{text}{_ANSI_RESET}" if color else text
 
 
 def buildColorizer(useColor: bool) -> Colorizer:
-    """Wählt die Einfärbung: ``colorlog``-Palette, ANSI-Fallback oder keine."""
+    """Choose the colorizer: ``colorlog`` palette, ANSI fallback, or none."""
     if not useColor:
         return plainColorizer
     try:
@@ -87,17 +87,17 @@ def buildColorizer(useColor: bool) -> Colorizer:
 
 
 class BlockFormatter(logging.Formatter):
-    """Formatter, der mehrzeilige Befunde als eingerückten, abgesetzten Block ausgibt.
+    """Formatter that renders multi-line findings as an indented, separated block.
 
-    Einzeilige Meldungen bleiben kompakt untereinander. Sobald eine Meldung
-    mehrere Zeilen hat (die detaillierten Fehler- und Warnblöcke), werden die
-    Folgezeilen eingerückt und der Block durch eine Leerzeile abgesetzt.
+    Single-line messages stay compact underneath each other. As soon as a
+    message spans several lines (the detailed error and warning blocks), its
+    continuation lines are indented and the block is set off by a blank line.
     """
 
     def __init__(self, colorizer: Colorizer) -> None:
         super().__init__(_LOG_FORMAT)
         self.colorizer = colorizer
-        # Verhindert eine führende Leerzeile vor der allerersten Meldung.
+        # Prevents a leading blank line in front of the very first message.
         self._previousBlockSeparated = True
 
     def format(self, record: logging.LogRecord) -> str:
@@ -120,23 +120,23 @@ class BlockFormatter(logging.Formatter):
 
 
 def supportsColor(stream: object) -> bool:
-    """Prüft, ob auf diesem Stream ANSI-Farben sinnvoll sind."""
+    """Check whether ANSI colors make sense on this stream."""
     if os.environ.get("NO_COLOR"):
         return False
     return bool(getattr(stream, "isatty", lambda: False)())
 
 
 def buildFormatter(useColor: bool) -> logging.Formatter:
-    """Erzeugt den Formatter samt passender Einfärbung."""
+    """Build the formatter together with its colorizer."""
     return BlockFormatter(buildColorizer(useColor))
 
 
 def configureLogging(level: int = logging.INFO, color: bool | None = None) -> logging.Logger:
-    """Konfiguriert den Converter-Logger und liefert ihn zurück.
+    """Configure the converter logger and return it.
 
     Args:
-        level: Minimales Log-Level.
-        color: ``True``/``False`` erzwingt Farbe; ``None`` = automatisch nach TTY.
+        level: Minimum log level.
+        color: ``True``/``False`` forces colors; ``None`` decides by TTY.
     """
     stream = sys.stderr
     useColor = supportsColor(stream) if color is None else color
@@ -155,16 +155,16 @@ def configureLogging(level: int = logging.INFO, color: bool | None = None) -> lo
 
 
 def addDebugFileHandler(logger: logging.Logger, path: Path) -> Path:
-    """Hängt einen zusätzlichen Handler an, der ALLES ab ``DEBUG`` in eine Datei schreibt.
+    """Attach an extra handler that writes EVERYTHING from ``DEBUG`` up to a file.
 
-    Unabhängig vom Konsolen-Log-Level (``--log-level``) landet im Debug-File immer
-    die volle Detailtiefe – nützlich, um ein Problem nachträglich zu untersuchen,
-    ohne die Konsole mit ``DEBUG``-Meldungen zu überfluten. Die Datei ist reiner
-    Text ohne ANSI-Farbcodes, damit sie sich problemlos weitergeben und durchsuchen
-    lässt. Eine bestehende Datei wird überschrieben, nicht angehängt.
+    Independent of the console log level (``--log-level``), the debug file always
+    receives the full detail - useful to investigate a problem afterwards without
+    flooding the console with ``DEBUG`` messages. The file is plain text without
+    ANSI color codes so it can be shared and searched easily. An existing file is
+    overwritten, not appended to.
 
     Returns:
-        Der absolute Pfad der Debug-Datei (für die Abschlussmeldung).
+        The absolute path of the debug file (for the closing message).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = logging.FileHandler(path, mode="w", encoding="utf-8")
@@ -177,5 +177,5 @@ def addDebugFileHandler(logger: logging.Logger, path: Path) -> Path:
 
 
 def getLogger(name: str | None = None) -> logging.Logger:
-    """Liefert den Converter-Logger bzw. einen benannten Unterlogger."""
+    """Return the converter logger, or a named child logger."""
     return logging.getLogger(LOGGER_NAME if name is None else f"{LOGGER_NAME}.{name}")

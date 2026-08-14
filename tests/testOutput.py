@@ -1,4 +1,4 @@
-"""Tests des Output-Vertrags und des Schreibpfads (Fälle 23-25)."""
+"""Tests for the output contract and the write path (cases 23-25)."""
 
 from __future__ import annotations
 
@@ -38,12 +38,12 @@ EXPECTED_NETWORK_ELEMENT_HEADER = (
 
 
 def parseHeaderSpec(headerLine: str) -> list[str]:
-    """Liest die in der Spezifikation vorgegebene Headerzeile ein."""
+    """Parse the header line exactly as given in the specification."""
     return next(csv.reader([headerLine]))
 
 
 def sampleRows() -> list[dict[str, object]]:
-    """Kleines, fachlich gültiges Beispiel mit Station und Netzelement."""
+    """A small, business-valid sample with stations and a network element."""
     return [
         stationRow(),
         stationRow(
@@ -61,12 +61,12 @@ def sampleRows() -> list[dict[str, object]]:
 
 
 def testStationHeaderMatchesSpecification() -> None:
-    """Fall 23: exakte Header-Reihenfolge von Stationen.csv."""
+    """Case 23: exact header order of Stationen.csv."""
     assert list(STATION_COLUMNS) == parseHeaderSpec(EXPECTED_STATION_HEADER)
 
 
 def testNetworkElementHeaderMatchesSpecification() -> None:
-    """Fall 24: exakte Header-Reihenfolge von Netzelemente.csv."""
+    """Case 24: exact header order of Netzelemente.csv."""
     assert list(NETWORK_ELEMENT_COLUMNS) == parseHeaderSpec(EXPECTED_NETWORK_ELEMENT_HEADER)
 
 
@@ -88,14 +88,14 @@ def testWrittenCsvContentIsClean(tmp_path: Path, logger: logging.Logger) -> None
     runConversion(inputFile, tmp_path / "out", logger)
 
     text = (tmp_path / "out" / STATIONS_FILENAME).read_text(encoding="utf-8")
-    assert "Hämburg" in text, "Umlaute müssen erhalten bleiben"
-    # JSON-Listen werden RFC-4180-konform gequotet ("" für ein inneres ").
+    assert "Hämburg" in text, "umlauts must be preserved"
+    # JSON lists are quoted per RFC 4180 ("" for an inner ").
     assert '"[""380""]"' in text
 
     with (tmp_path / "out" / STATIONS_FILENAME).open(encoding="utf-8", newline="") as handle:
         records = list(csv.DictReader(handle))
     assert len(records) == 2
-    # Round-Trip: aus dem CSV-Feld kommt exakt die JSON-Liste zurück.
+    # Round trip: the CSV field yields exactly the JSON list again.
     assert records[0]["Spannung"] == '["380"]'
     assert json.loads(records[0]["Spannung"]) == ["380"]
     assert records[1]["relevant für"] == '["50Hertz"]'
@@ -112,7 +112,7 @@ def testWrittenCsvContentIsClean(tmp_path: Path, logger: logging.Logger) -> None
 
 
 def testNoCsvFilesOnFatalError(tmp_path: Path, logger: logging.Logger) -> None:
-    """Fall 25: bei fatalem Fehler entsteht keine einzige CSV-Datei."""
+    """Case 25: on a fatal error not a single CSV file is created."""
     rows = [*sampleRows(), elementRow(**{"ELEMENT ID": "LINE_9", "Station 2": ""})]
     inputFile = writeExcel(rows, tmp_path / "input.xlsx")
     outputDir = tmp_path / "out"
@@ -182,7 +182,7 @@ def testMissingRequiredColumnIsFatal(
 
 
 def testBothReadEnginesProduceIdenticalOutput(tmp_path: Path, logger: logging.Logger) -> None:
-    """Der optionale calamine-Beschleuniger darf das Ergebnis nicht verändern."""
+    """The optional calamine accelerator must not change the result."""
     pytest.importorskip("python_calamine")
     inputFile = writeExcel(sampleRows(), tmp_path / "input.xlsx")
 

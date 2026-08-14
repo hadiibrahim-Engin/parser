@@ -1,26 +1,26 @@
-"""Exception-Typen des Converters.
+"""Exception types of the converter.
 
-Trennung:
+The split:
 
-* :class:`ConversionError` beendet die Conversion (fatal, Exit-Code != 0).
-* :class:`NormalizationError` ist ein *lokaler* Fehler einer Normalisierungs-
-  funktion. Er wird vom Aufrufer eingesammelt und in eine detaillierte
-  Fehlermeldung (Zeile / ELEMENT ID / Feld / Wert) übersetzt.
+* :class:`ConversionError` ends the conversion (fatal, exit code != 0).
+* :class:`NormalizationError` is a *local* failure of a normalization function.
+  The caller collects it and turns it into a detailed message
+  (row / ELEMENT ID / field / value).
 """
 
 from __future__ import annotations
 
 
 class ConversionError(Exception):
-    """Fataler Fehler: die Conversion wird abgebrochen, es entstehen keine CSVs."""
+    """Fatal error: the conversion is aborted and no CSV files are produced."""
 
 
 class NormalizationError(ValueError):
-    """Ein einzelner Wert konnte nicht zuverlässig normalisiert werden.
+    """A single value could not be normalized reliably.
 
-    Trägt die fachliche Beschreibung (``problem``) und den erwarteten Zustand
-    (``expected``), damit der Aufrufer daraus eine vollständige Fehlermeldung
-    bauen kann, ohne den Kontext erneut zu kennen.
+    Carries the business description (``problem``) and the expected state
+    (``expected``) so the caller can build a complete message without needing to
+    know the context again.
     """
 
     def __init__(self, problem: str, expected: str = "") -> None:

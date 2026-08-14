@@ -1,8 +1,8 @@
-"""Einlesen der Excel-Datei und Aufbereitung des Input-Schemas.
+"""Reading the Excel file and preparing the input schema.
 
-Verantwortlich für: Datei-I/O, Spaltennormalisierung, Schemaprüfung und das
-Verwerfen komplett leerer Zeilen. Die fachliche Transformation findet
-bewusst NICHT hier statt.
+Responsible for: file I/O, header detection, column normalization, schema
+validation and dropping completely empty rows. The business transformation
+deliberately does NOT happen here.
 """
 
 from __future__ import annotations
@@ -21,28 +21,27 @@ from excelToCsv.errors import ConversionError, NormalizationError
 from excelToCsv.normalize import collapseWhitespace, isBlank, normalizeText
 from excelToCsv.schema import KNOWN_INPUT_COLUMNS, REQUIRED_INPUT_COLUMNS
 
-#: Abstand zwischen Headerzeile und erster Datenzeile (1-basiert gerechnet).
+#: Distance between the header row and the first data row (counted 1-based).
 HEADER_ROW_OFFSET = 2
 
-#: So viele Zeilen werden maximal nach der Headerzeile abgesucht.
+#: At most this many rows are scanned when searching for the header row.
 MAX_HEADER_SCAN_ROWS = 100
 
-#: Anteil der Pflichtspalten, den eine Zeile treffen muss, um als Header zu gelten.
+#: Share of the required columns a row should match to be a convincing header.
 MIN_HEADER_MATCH_RATIO = 0.5
 
-#: Name für Spalten, deren Headerzelle leer ist (analog zu pandas).
+#: Name given to columns whose header cell is empty (same idea as pandas).
 UNNAMED_COLUMN_TEMPLATE = "Unnamed: {position}"
 
-#: Standard-Engine. ``openpyxl`` ist immer verfügbar; ``calamine`` ist ein
-#: optionaler Beschleuniger (Faktor ~5 beim Lesen) und wird nur genutzt,
-#: wenn das Paket installiert ist.
+#: Default engine. ``openpyxl`` is always available; ``calamine`` is an optional
+#: accelerator (roughly 5x faster reading) and is only used when installed.
 DEFAULT_ENGINE = "auto"
 FALLBACK_ENGINE = "openpyxl"
 FAST_ENGINE = "calamine"
 
 
 def resolveEngine(engine: str, logger: logging.Logger) -> str:
-    """Wählt die Lese-Engine; ``auto`` bevorzugt ``calamine``, sonst ``openpyxl``."""
+    """Pick the reading engine; ``auto`` prefers ``calamine``, else ``openpyxl``."""
     if engine != DEFAULT_ENGINE:
         return engine
     if importlib.util.find_spec("python_calamine") is not None:
@@ -53,7 +52,7 @@ def resolveEngine(engine: str, logger: logging.Logger) -> str:
 
 @dataclass(slots=True)
 class InputTable:
-    """Eingelesene und aufbereitete Inputtabelle inklusive Excel-Zeilennummern."""
+    """A prepared input table together with its real Excel row numbers."""
 
     frame: pd.DataFrame
     rowNumbers: np.ndarray
@@ -70,15 +69,15 @@ def loadExcel(
     logger: logging.Logger,
     engine: str = DEFAULT_ENGINE,
 ) -> tuple[pd.DataFrame, str]:
-    """Liest ein Worksheet roh ein – ohne Annahme über die Kopfzeile.
+    """Read a worksheet raw - without assuming where the header is.
 
-    Es wird mit ``header=None`` gelesen, damit die Headerzeile anschließend
-    frei bestimmt werden kann. ``dtype=object`` verhindert, dass pandas Werte
-    (IDs, Spannungen, Codes) eigenmächtig in Zahlen konvertiert. Ohne explizite
-    Auswahl wird das erste Worksheet verwendet und dessen Name geloggt.
+    Reading uses ``header=None`` so the header row can be determined afterwards.
+    ``dtype=object`` prevents pandas from converting values (ids, voltages,
+    codes) into numbers on its own. Without an explicit selection the first
+    worksheet is used and its name is logged.
 
     Raises:
-        ConversionError: Datei fehlt, ist unlesbar oder das Sheet existiert nicht.
+        ConversionError: File missing, unreadable, or the sheet does not exist.
     """
     if not path.is_file():
         logger.error("Input file not found: %s", path)
@@ -120,7 +119,7 @@ def loadExcel(
             frame = workbook.parse(sheet_name=selected, dtype=object, header=None)
     except ConversionError:
         raise
-    except Exception as exc:  # openpyxl/pandas werfen sehr heterogene Fehler
+    except Exception as exc:  # openpyxl/pandas raise very heterogeneous errors
         if selectedEngine != FALLBACK_ENGINE and engine == DEFAULT_ENGINE:
             logger.warning(
                 "Reading with the '%s' engine failed (%s) - retrying with '%s'.",
@@ -142,21 +141,21 @@ def loadExcel(
 
 
 # --------------------------------------------------------------------------- #
-# Headerzeile bestimmen
+# Locating the header row
 # --------------------------------------------------------------------------- #
 
 
 def headerKey(value: object) -> str:
-    """Vergleichsschlüssel einer Headerzelle (getrimmt, klein, ohne Doppel-Spaces)."""
+    """Comparison key of a header cell (trimmed, lowercased, single-spaced)."""
     return collapseWhitespace(normalizeText(value)).lower()
 
 
-#: Vorberechnete Schlüssel der Pflichtspalten – Aufbau nur einmal pro Prozess.
+#: Pre-computed keys of the required columns - built once per process.
 _REQUIRED_KEYS: frozenset[str] = frozenset(headerKey(name) for name in REQUIRED_INPUT_COLUMNS)
 
 
 def scoreHeaderRow(values: np.ndarray) -> int:
-    """Zählt, wie viele Pflichtspalten in dieser Zeile als Überschrift stehen."""
+    """Count how many required column names appear as headings in this row."""
     return len(_REQUIRED_KEYS & {headerKey(value) for value in values if not isBlank(value)})
 
 
@@ -165,20 +164,20 @@ def detectHeaderRow(
     logger: logging.Logger,
     maxScanRows: int = MAX_HEADER_SCAN_ROWS,
 ) -> int:
-    """Findet die Zeile mit den Spaltenüberschriften (0-basierte Position).
+    """Find the row holding the column headings (0-based position).
 
-    Bewertet wird jede der ersten ``maxScanRows`` Zeilen danach, wie viele
-    Pflichtspalten sie als Überschrift enthält. Die erste Zeile mit der höchsten
-    Trefferzahl gewinnt; bei vollständiger Übereinstimmung wird sofort abgebrochen.
-    Alles oberhalb dieser Zeile ist Vorspann und wird verworfen.
+    Each of the first ``maxScanRows`` rows is scored by how many required column
+    names it contains as headings. The first row with the highest score wins; a
+    perfect match stops the search immediately. Everything above that row is
+    preamble and gets discarded.
 
-    Eine schwach passende Kopfzeile wird bewusst akzeptiert und nur als ``WARNING``
-    gemeldet: Die anschließende Schemaprüfung benennt dann exakt, welche Spalte
-    fehlt – das ist deutlich hilfreicher als ein pauschales "nicht gefunden".
+    A weakly matching header is deliberately accepted and only reported as a
+    ``WARNING``: the schema check that follows then names the exact missing
+    column, which is far more useful than a blanket "not found".
 
     Raises:
-        ConversionError: Wenn keine der abgesuchten Zeilen auch nur eine
-            Pflichtspalte enthält.
+        ConversionError: If none of the scanned rows contains even one required
+            column name.
     """
     limit = min(len(raw), maxScanRows)
     required = len(REQUIRED_INPUT_COLUMNS)
@@ -230,7 +229,7 @@ def detectHeaderRow(
 
 
 def applyHeaderRow(raw: pd.DataFrame, headerIndex: int) -> pd.DataFrame:
-    """Macht ``headerIndex`` zur Kopfzeile und verwirft alles darüber."""
+    """Promote ``headerIndex`` to the header row and discard everything above it."""
     headerValues = raw.iloc[headerIndex].to_numpy(dtype=object)
     names = [
         collapseWhitespace(normalizeText(value)) or UNNAMED_COLUMN_TEMPLATE.format(position=position)
@@ -246,14 +245,14 @@ def resolveHeaderIndex(
     headerRow: int | None,
     logger: logging.Logger,
 ) -> int:
-    """Bestimmt die Kopfzeile – explizit vorgegeben oder automatisch erkannt.
+    """Determine the header row - either explicitly given or detected.
 
     Args:
-        raw: Rohe Tabelle ohne Kopfzeilenannahme.
-        headerRow: 1-basierte Excel-Zeilennummer oder ``None`` für Automatik.
+        raw: Raw table without any header assumption.
+        headerRow: 1-based Excel row number, or ``None`` for automatic detection.
 
     Raises:
-        ConversionError: Bei einer ungültigen Vorgabe oder nicht erkennbarem Header.
+        ConversionError: On an invalid override or an undetectable header.
     """
     if headerRow is None:
         return detectHeaderRow(raw, logger)
@@ -272,14 +271,14 @@ def resolveHeaderIndex(
 
 
 def normalizeColumns(frame: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
-    """Trimmt Spaltenüberschriften und führt sie auf die kanonische Schreibweise.
+    """Trim column headings and map them onto their canonical spelling.
 
-    Die Zuordnung erfolgt case-insensitiv und whitespace-tolerant. Unbekannte
-    Spalten behalten ihren (getrimmten) Namen – sie werden für die dynamische
-    Relevanz-Erkennung noch gebraucht.
+    Matching is case-insensitive and whitespace-tolerant. Unknown columns keep
+    their (trimmed) name - they are still needed for the dynamic relevance
+    detection.
 
     Raises:
-        ConversionError: Wenn nach der Normalisierung doppelte Spalten entstehen.
+        ConversionError: If normalization produces duplicate column names.
     """
     canonicalByKey = {collapseWhitespace(name).lower(): name for name in KNOWN_INPUT_COLUMNS}
 
@@ -302,10 +301,10 @@ def normalizeColumns(frame: pd.DataFrame, logger: logging.Logger) -> pd.DataFram
 
 
 def validateRequiredInputColumns(frame: pd.DataFrame, logger: logging.Logger) -> None:
-    """Stellt sicher, dass alle zwingend benötigten Inputspalten vorhanden sind.
+    """Ensure that every mandatory input column is present.
 
     Raises:
-        ConversionError: Sobald mindestens eine Pflichtspalte fehlt.
+        ConversionError: As soon as at least one required column is missing.
     """
     present = set(frame.columns)
     missing = [name for name in REQUIRED_INPUT_COLUMNS if name not in present]
@@ -321,7 +320,7 @@ def dropEmptyRows(
     rowNumbers: np.ndarray,
     logger: logging.Logger,
 ) -> tuple[pd.DataFrame, np.ndarray]:
-    """Entfernt Zeilen, die in JEDER Spalte leer sind (typische Excel-Leerzeilen)."""
+    """Drop rows that are empty in EVERY column (typical trailing Excel rows)."""
     if frame.empty:
         return frame, rowNumbers
 
@@ -346,11 +345,11 @@ def buildInputTable(
     engine: str = DEFAULT_ENGINE,
     headerRow: int | None = None,
 ) -> InputTable:
-    """Kompletter Lesepfad: Excel -> validiertes, aufbereitetes ``InputTable``.
+    """The complete read path: Excel -> validated, prepared ``InputTable``.
 
-    Die Kopfzeile wird automatisch gesucht (oder per ``headerRow`` vorgegeben);
-    alle Zeilen oberhalb gelten als Vorspann und werden verworfen. Die gemeldeten
-    Zeilennummern beziehen sich weiterhin auf die echte Excel-Zeile.
+    The header row is detected automatically (or given via ``headerRow``); every
+    row above it counts as preamble and is discarded. The reported row numbers
+    still refer to the real Excel row.
     """
     raw, sheetName = loadExcel(path, sheet, logger, engine=engine)
     headerIndex = resolveHeaderIndex(raw, headerRow, logger)
@@ -371,14 +370,14 @@ def buildInputTable(
 
 
 def columnValues(frame: pd.DataFrame, column: str) -> np.ndarray:
-    """Liefert eine Spalte als Objekt-Array; fehlende Spalten werden zu ``None``."""
+    """Return a column as an object array; a missing column yields ``None`` values."""
     if column in frame.columns:
         return frame[column].to_numpy(dtype=object)
     return np.full(len(frame), None, dtype=object)
 
 
 def textColumn(frame: pd.DataFrame, column: str) -> np.ndarray:
-    """Liefert eine Spalte als getrimmte Textwerte (Leerwerte werden ``""``)."""
+    """Return a column as trimmed text values (empty values become ``""``)."""
     values = columnValues(frame, column)
     return np.fromiter(
         (normalizeText(value) for value in values), dtype=object, count=len(values)
@@ -389,13 +388,13 @@ def applyNormalizer(
     values: np.ndarray,
     normalizer: Callable[[Any], str],
 ) -> tuple[np.ndarray, list[tuple[int, NormalizationError]]]:
-    """Wendet einen Normalisierer spaltenweise an und sammelt Einzelfehler ein.
+    """Apply a normalizer column-wise and collect the individual failures.
 
-    Statt beim ersten Problem abzubrechen, wird jeder fehlerhafte Wert mit
-    seiner Position gemeldet – so sieht der Anwender in einem Lauf alle Fehler.
+    Instead of stopping at the first problem, every faulty value is reported with
+    its position, so one run surfaces all errors at once.
 
     Returns:
-        Tuple aus normalisierten Werten und ``(position, error)``-Paaren.
+        A tuple of normalized values and ``(position, error)`` pairs.
     """
     result = np.empty(len(values), dtype=object)
     failures: list[tuple[int, NormalizationError]] = []

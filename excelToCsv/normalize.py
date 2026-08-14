@@ -1,11 +1,11 @@
-"""Reine Normalisierungsfunktionen für einzelne Zellwerte.
+"""Pure normalization functions for individual cell values.
 
-Alle Funktionen hier sind seiteneffektfrei und ohne I/O – dadurch sind sie
-einzeln testbar und können spaltenweise (vektorisiert) angewendet werden.
+Every function here is side-effect free and does no I/O, which makes them
+individually testable and allows them to be applied column-wise (vectorized).
 
-Konvention: Ein Wert, der nicht zuverlässig interpretierbar ist, führt zu einer
-:class:`~excelToCsv.errors.NormalizationError`. Es wird niemals geraten und
-niemals ein kaputter Wert stillschweigend übernommen.
+Convention: a value that cannot be interpreted reliably raises a
+:class:`~excelToCsv.errors.NormalizationError`. Nothing is ever guessed and no
+broken value is silently passed through.
 """
 
 from __future__ import annotations
@@ -13,27 +13,28 @@ from __future__ import annotations
 import datetime as dt
 import math
 import re
+from dataclasses import dataclass
 from typing import Final
 
 from excelToCsv.errors import NormalizationError
 
 # --------------------------------------------------------------------------- #
-# Text / Leerwerte
+# Text / empty values
 # --------------------------------------------------------------------------- #
 
-#: Zeichen, die als Whitespace am Rand entfernt werden (inkl. NBSP).
-_WHITESPACE: Final = " \t\r\n\v\f   ﻿"
+#: Characters stripped as whitespace at the edges (including NBSP).
+_WHITESPACE: Final = " \t\r\n\v\f   ﻿"
 
-_INNER_WHITESPACE: Final = re.compile(r"[\s ]+")
+_INNER_WHITESPACE: Final = re.compile(r"[\s ]+")
 
 
 def isBlank(value: object) -> bool:
-    """``True`` für ``None``, ``NaN``, ``NaT`` oder reinen Whitespace."""
+    """Return ``True`` for ``None``, ``NaN``, ``NaT`` or pure whitespace."""
     if value is None:
         return True
     if isinstance(value, float):
         return math.isnan(value)
-    if value is not value:  # pragma: no cover - deckt exotische NA-Sentinels ab
+    if value is not value:  # pragma: no cover - covers exotic NA sentinels
         return True
     if isinstance(value, str):
         return not value.strip(_WHITESPACE)
@@ -41,10 +42,10 @@ def isBlank(value: object) -> bool:
 
 
 def normalizeText(value: object) -> str:
-    """Wandelt einen Zellwert in getrimmten Text; Leerwerte werden ``""``.
+    """Convert a cell value into trimmed text; empty values become ``""``.
 
-    Ganzzahlige Floats (Excel liefert häufig ``123.0``) werden als ``"123"``
-    dargestellt, damit keine künstlichen ``.0``-Endungen in IDs landen.
+    Integral floats (Excel often delivers ``123.0``) are rendered as ``"123"``
+    so that no artificial ``.0`` suffix ends up in identifiers.
     """
     if isBlank(value):
         return ""
@@ -60,7 +61,7 @@ def normalizeText(value: object) -> str:
 
 
 def collapseWhitespace(value: str) -> str:
-    """Trimmt und reduziert innere Whitespace-Folgen auf ein Leerzeichen."""
+    """Trim and reduce inner runs of whitespace to a single space."""
     return _INNER_WHITESPACE.sub(" ", value).strip()
 
 
@@ -70,12 +71,12 @@ def collapseWhitespace(value: str) -> str:
 
 
 def normalizeElementType(value: object) -> str:
-    """Normalisiert ``ELEMENT-TYPE`` auf Uppercase (Prüfung case-insensitive)."""
+    """Normalize ``ELEMENT-TYPE`` to uppercase (the check is case-insensitive)."""
     return normalizeText(value).upper()
 
 
 # --------------------------------------------------------------------------- #
-# Spannung
+# Voltage
 # --------------------------------------------------------------------------- #
 
 _VOLTAGE_SEPARATOR: Final = "/"
@@ -83,11 +84,11 @@ _NUMERIC_TOKEN: Final = re.compile(r"^[+-]?\d+(?:[.,]\d+)?$")
 
 
 def normalizeVoltageToken(token: str) -> str:
-    """Normalisiert einen einzelnen Spannungswert.
+    """Normalize a single voltage value.
 
-    Numerische Werte verlieren überflüssige ``.0``-Endungen (``380.0`` ->
-    ``380``). Nichtnumerische fachliche Werte (z. B. ``DC``) bleiben unverändert
-    – sie dürfen nicht durch eine numerische Konvertierung zerstört werden.
+    Numeric values lose a redundant ``.0`` suffix (``380.0`` -> ``380``).
+    Non-numeric business values such as ``DC`` are kept unchanged - they must not
+    be destroyed by a numeric conversion.
     """
     token = token.strip(_WHITESPACE)
     if not token or not _NUMERIC_TOKEN.match(token):
@@ -99,10 +100,10 @@ def normalizeVoltageToken(token: str) -> str:
 
 
 def splitVoltages(value: object) -> list[str]:
-    """Zerlegt ``VOLTAGE-LEVEL`` in einzelne normalisierte Spannungen.
+    """Split ``VOLTAGE-LEVEL`` into individual normalized voltages.
 
     ``"380.0/110.0"`` -> ``["380", "110"]``; ``"DC"`` -> ``["DC"]``;
-    leer -> ``[]``.
+    empty -> ``[]``.
     """
     text = normalizeText(value)
     if not text:
@@ -115,38 +116,105 @@ def splitVoltages(value: object) -> list[str]:
 
 
 def normalizeVoltage(value: object) -> str:
-    """Normalisierte Spannung als Text (``"380/110"``), niemals als Zahl."""
+    """Normalized voltage as text (``"380/110"``), never as a number."""
     return _VOLTAGE_SEPARATOR.join(splitVoltages(value))
 
 
 # --------------------------------------------------------------------------- #
-# Koordinaten
+# Coordinates
 # --------------------------------------------------------------------------- #
 
 LATITUDE_RANGE: Final = (-90.0, 90.0)
 LONGITUDE_RANGE: Final = (-180.0, 180.0)
+
+_COORDINATE_EXPECTATION: Final = (
+    "A decimal number using '.' or ',' as decimal separator."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CoordinateValue:
+    """A normalized coordinate together with a note about any repair applied.
+
+    ``repair`` is empty when the value was already well-formed. Otherwise it
+    describes, in one human-readable sentence, what was changed - the caller
+    turns that into a ``WARNING`` carrying the full row context.
+    """
+
+    text: str
+    repair: str = ""
+
+
+def decimalPlaceCount(text: str) -> int:
+    """Return how many digits follow the decimal point in a normalized value."""
+    _, separator, decimals = text.partition(".")
+    return len(decimals) if separator else 0
+
+
+def repairMissingSeparator(
+    text: str,
+    decimalPlaces: int,
+    limits: tuple[float, float],
+) -> str | None:
+    """Reinsert a decimal separator that was forgotten in the source data.
+
+    ``"52459373"`` with ``decimalPlaces=6`` becomes ``"52.459373"``. The number of
+    decimal places cannot be derived from the value itself - ``13361402`` is
+    equally consistent with ``13.361402`` and ``133.61402`` - so the caller must
+    supply the precision observed in the intact values of the same column.
+
+    Returns:
+        The repaired text, or ``None`` when no reliable repair is possible
+        (non-digit characters, too few digits, or still out of range).
+    """
+    sign = "-" if text.startswith("-") else ""
+    digits = text.lstrip("+-")
+    if not digits.isdigit():
+        return None
+    if decimalPlaces <= 0 or len(digits) <= decimalPlaces:
+        # Without at least one leading integer digit the result would be a
+        # fabricated near-zero value rather than a repair.
+        return None
+
+    repaired = f"{sign}{digits[:-decimalPlaces]}.{digits[-decimalPlaces:]}"
+    low, high = limits
+    if not low <= float(repaired) <= high:
+        return None
+    return repaired
 
 
 def normalizeCoordinate(
     value: object,
     *,
     limits: tuple[float, float],
-    ambiguous: list[str] | None = None,
-) -> str:
-    """Normalisiert eine Koordinate auf Punkt-Dezimaltrennzeichen.
+    decimalPlaces: int | None = None,
+) -> CoordinateValue:
+    """Normalize a coordinate to use a dot as the decimal separator.
 
-    Akzeptiert ``52.459373``, ``"52,459373"`` sowie echte Excel-Zahlen. Der
-    Wertebereich wird gegen ``limits`` geprüft.
+    Accepts ``52.459373``, ``"52,459373"`` and native Excel numbers. The value is
+    range-checked against ``limits``.
+
+    Two repairs may be applied, and each is reported through
+    :attr:`CoordinateValue.repair` so the caller can log a warning:
+
+    * both ``.`` and ``,`` present - the last separator is taken as the decimal
+      separator,
+    * decimal separator missing entirely and the value therefore out of range -
+      the separator is reinserted using ``decimalPlaces``.
+
+    A value that is out of range but *does* carry a decimal separator is a
+    genuine data error and is never repaired.
 
     Args:
-        value: Rohwert aus dem Excel.
-        limits: Zulässiger Bereich (min, max).
-        ambiguous: Optionale Liste, in die ein Hinweis geschrieben wird, wenn
-            Punkt UND Komma vorkamen und heuristisch aufgelöst wurde.
+        value: Raw value from the spreadsheet.
+        limits: Permitted range as ``(min, max)``.
+        decimalPlaces: Precision observed in the intact values of the same
+            column, used to repair a missing separator. ``None`` disables that
+            repair.
 
     Raises:
-        NormalizationError: Wenn der Wert leer, nicht numerisch oder außerhalb
-            des zulässigen Bereichs ist.
+        NormalizationError: If the value is empty, not numeric, or out of range
+            and not repairable.
     """
     if isBlank(value):
         raise NormalizationError(
@@ -155,22 +223,24 @@ def normalizeCoordinate(
         )
 
     if isinstance(value, bool):
-        raise NormalizationError(
-            "Coordinate is not a valid number.",
-            "A decimal number using '.' or ',' as decimal separator.",
-        )
+        raise NormalizationError("Coordinate is not a valid number.", _COORDINATE_EXPECTATION)
+
+    repair = ""
 
     if isinstance(value, (int, float)):
         text = str(int(value)) if float(value).is_integer() else repr(float(value))
     else:
         text = str(value).strip(_WHITESPACE).replace(" ", "")
         if "," in text and "." in text:
-            # Mehrdeutig: das zuletzt auftretende Zeichen gilt als Dezimaltrenner.
+            # Ambiguous: the separator occurring last is taken as the decimal one.
             decimalSeparator = "," if text.rfind(",") > text.rfind(".") else "."
             thousandsSeparator = "." if decimalSeparator == "," else ","
-            text = text.replace(thousandsSeparator, "").replace(decimalSeparator, ".")
-            if ambiguous is not None:
-                ambiguous.append(str(value))
+            cleaned = text.replace(thousandsSeparator, "").replace(decimalSeparator, ".")
+            repair = (
+                f"Coordinate contained both '.' and ',' - the last separator was read as "
+                f"the decimal separator ({text} -> {cleaned})."
+            )
+            text = cleaned
         else:
             text = text.replace(",", ".")
 
@@ -178,47 +248,67 @@ def normalizeCoordinate(
         number = float(text)
     except ValueError:
         raise NormalizationError(
-            "Coordinate is not a valid number.",
-            "A decimal number using '.' or ',' as decimal separator.",
+            "Coordinate is not a valid number.", _COORDINATE_EXPECTATION
         ) from None
 
     if math.isnan(number) or math.isinf(number):
-        raise NormalizationError(
-            "Coordinate is not a finite number.",
-            "A decimal number using '.' or ',' as decimal separator.",
-        )
+        raise NormalizationError("Coordinate is not a finite number.", _COORDINATE_EXPECTATION)
 
+    text = text.lstrip("+") or "0"
     low, high = limits
-    if not low <= number <= high:
+    if low <= number <= high:
+        return CoordinateValue(text=text, repair=repair)
+
+    if "." in text:
         raise NormalizationError(
             "Coordinate is out of range.",
             f"A value between {low:g} and {high:g}.",
         )
 
-    return text.lstrip("+") or "0"
+    # No decimal separator at all and out of range: the separator was most likely
+    # forgotten when the sheet was filled in.
+    if decimalPlaces is not None:
+        repaired = repairMissingSeparator(text, decimalPlaces, limits)
+        if repaired is not None:
+            return CoordinateValue(
+                text=repaired,
+                repair=(
+                    f"Coordinate had no decimal separator - it was reinserted using the "
+                    f"{decimalPlaces}-decimal precision of this column "
+                    f"({text} -> {repaired})."
+                ),
+            )
+
+    raise NormalizationError(
+        "Coordinate is out of range and its decimal separator appears to be missing.",
+        (
+            f"A value between {low:g} and {high:g}. The separator can only be restored "
+            f"automatically when other rows of the same column show the intended precision."
+        ),
+    )
 
 
-def normalizeLatitude(value: object, ambiguous: list[str] | None = None) -> str:
-    """Normalisiert eine Breitengrad-Angabe (-90 .. 90)."""
-    return normalizeCoordinate(value, limits=LATITUDE_RANGE, ambiguous=ambiguous)
+def normalizeLatitude(value: object, decimalPlaces: int | None = None) -> CoordinateValue:
+    """Normalize a latitude (-90 .. 90)."""
+    return normalizeCoordinate(value, limits=LATITUDE_RANGE, decimalPlaces=decimalPlaces)
 
 
-def normalizeLongitude(value: object, ambiguous: list[str] | None = None) -> str:
-    """Normalisiert eine Längengrad-Angabe (-180 .. 180)."""
-    return normalizeCoordinate(value, limits=LONGITUDE_RANGE, ambiguous=ambiguous)
+def normalizeLongitude(value: object, decimalPlaces: int | None = None) -> CoordinateValue:
+    """Normalize a longitude (-180 .. 180)."""
+    return normalizeCoordinate(value, limits=LONGITUDE_RANGE, decimalPlaces=decimalPlaces)
 
 
 # --------------------------------------------------------------------------- #
-# Datum
+# Dates
 # --------------------------------------------------------------------------- #
 
 DATE_OUTPUT_FORMAT: Final = "%d.%m.%Y"
 
-#: Excel-Seriennummern beziehen sich (im 1900-System) auf diesen Ursprung.
+#: Excel serial numbers (1900 system) are relative to this origin.
 _EXCEL_EPOCH: Final = dt.datetime(1899, 12, 30)
 _EXCEL_SERIAL_RANGE: Final = (1.0, 2958465.0)  # 01.01.1900 .. 31.12.9999
 
-#: Deterministische Formatliste – es wird nie geraten (kein dayfirst-Heuristik).
+#: Deterministic list of formats - nothing is ever guessed (no dayfirst heuristic).
 _DATE_FORMATS: Final[tuple[str, ...]] = (
     "%Y-%m-%d",
     "%Y-%m-%d %H:%M:%S",
@@ -238,10 +328,10 @@ _DATE_EXPECTATION: Final = (
 
 
 def normalizeDate(value: object) -> str:
-    """Normalisiert ein Datum auf ``TT.MM.JJJJ``.
+    """Normalize a date to ``DD.MM.YYYY``.
 
-    Ein leerer Quellwert bleibt leer. Ein nicht leerer Wert, der nicht
-    zuverlässig als Datum interpretiert werden kann, ist ein fataler Fehler.
+    An empty source value stays empty. A non-empty value that cannot be
+    interpreted reliably is a fatal error.
     """
     if isBlank(value):
         return ""
@@ -277,7 +367,7 @@ def normalizeDate(value: object) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Boolean
+# Booleans
 # --------------------------------------------------------------------------- #
 
 _TRUE_LITERALS: Final[frozenset[str]] = frozenset({"1", "true"})
@@ -285,12 +375,12 @@ _FALSE_LITERALS: Final[frozenset[str]] = frozenset({"0", "false"})
 
 
 def parseBoolean(value: object) -> bool | None:
-    """Interpretiert einen Boolean-artigen Wert.
+    """Interpret a boolean-like value.
 
     Returns:
-        ``True`` / ``False`` bei eindeutigem Wert, sonst ``None``. Bei ``None``
-        wird bewusst nicht geraten – der Aufrufer loggt eine ``WARNING`` und
-        behandelt den Eintrag NICHT als ``True``.
+        ``True`` / ``False`` for an unambiguous value, otherwise ``None``. In the
+        ``None`` case nothing is guessed - the caller logs a ``WARNING`` and does
+        *not* treat the entry as ``True``.
     """
     if isBlank(value):
         return False
@@ -313,18 +403,18 @@ def parseBoolean(value: object) -> bool | None:
 
 
 # --------------------------------------------------------------------------- #
-# Stationskennung
+# Station identifiers
 # --------------------------------------------------------------------------- #
 
-#: Präfix, das einen virtuellen X-Knoten kennzeichnet.
+#: Prefix marking a virtual X node.
 _VIRTUAL_PREFIX: Final = "X"
 
 
 def splitStationId(elementId: str) -> tuple[str, str]:
-    """Zerlegt ``<Stationsname>_<Spannungsebene>`` am LETZTEN ``_``.
+    """Split ``<stationName>_<voltageLevel>`` at the LAST ``_``.
 
-    Fehlt der Unterstrich, gilt die komplette ID als Stationsname und die
-    Spannungsebene ist leer.
+    Without an underscore the whole id counts as the station name and the
+    voltage level is empty.
     """
     name, separator, level = elementId.rpartition("_")
     if not separator:
@@ -333,6 +423,6 @@ def splitStationId(elementId: str) -> tuple[str, str]:
 
 
 def isVirtualStation(elementId: str) -> bool:
-    """``True``, wenn der Stationsname vor dem letzten ``_`` mit ``X`` beginnt."""
+    """Return ``True`` when the name before the last ``_`` starts with ``X``."""
     name, _ = splitStationId(elementId)
     return name.startswith(_VIRTUAL_PREFIX)

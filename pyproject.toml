@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Optionaler Beschleuniger: liest große Arbeitsmappen ca. 5x schneller als openpyxl.
+# Optional accelerator: reads large workbooks about 5x faster than openpyxl.
 fast = ["python-calamine>=0.2"]
 dev = ["pytest>=7.4"]
 
@@ -25,7 +25,7 @@ excel-to-csv = "excelToCsv.cli:main"
 packages = ["excelToCsv"]
 
 [tool.pytest.ini_options]
-# Die Testdateien folgen der camelCase-Konvention dieses Projekts.
+# Test files follow this project's camelCase convention.
 python_files = ["test*.py"]
 python_functions = ["test*"]
 testpaths = ["tests"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI-Einstiegspunkt: ``python converter.py input.xlsx [--output-dir ./output]``."""
+"""CLI entry point: ``python converter.py input.xlsx [--output-dir ./output]``."""
 
 from __future__ import annotations
 

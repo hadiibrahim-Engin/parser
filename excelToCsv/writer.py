@@ -1,8 +1,8 @@
-"""Schreiben der finalen CSV-Dateien.
+"""Writing the final CSV files.
 
-Beide Dateien werden zunächst in temporäre Dateien im Zielverzeichnis
-geschrieben und erst danach atomar an ihren endgültigen Namen verschoben.
-So entsteht selbst bei einem I/O-Fehler kein halb geschriebener Output.
+Both files are first written to temporary files inside the target directory and
+only then moved atomically to their final name. That way not even an I/O error
+can leave a half-written output behind.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import pandas as pd
 from excelToCsv.errors import ConversionError
 from excelToCsv.schema import NETWORK_ELEMENTS_FILENAME, STATIONS_FILENAME
 
-#: Zeilenende laut Vertrag: ein einfaches LF, unabhängig vom Betriebssystem.
+#: Line ending per contract: a plain LF, independent of the operating system.
 LINE_TERMINATOR = "\n"
 
 
@@ -28,7 +28,7 @@ def _writeSingleCsv(
     encoding: str,
     quoting: int,
 ) -> None:
-    """Schreibt einen DataFrame atomar nach ``target``."""
+    """Write a DataFrame atomically to ``target``."""
     handle, temporaryName = tempfile.mkstemp(
         prefix=f".{target.name}.", suffix=".tmp", dir=str(target.parent)
     )
@@ -58,21 +58,21 @@ def writeCsvFiles(
     encoding: str = "utf-8",
     quoteAll: bool = False,
 ) -> tuple[Path, Path]:
-    """Schreibt ``Stationen.csv`` und ``Netzelemente.csv``.
+    """Write ``Stationen.csv`` and ``Netzelemente.csv``.
 
     Args:
-        stations: Fertig validierter Stationen-Datensatz.
-        networkElements: Fertig validierter Netzelemente-Datensatz.
-        outputDir: Zielverzeichnis; wird bei Bedarf angelegt.
-        logger: Logger für die Statusmeldungen.
-        encoding: Zielkodierung (``utf-8-sig`` für Excel-freundliche BOM).
-        quoteAll: ``True`` setzt jedes Feld in Anführungszeichen.
+        stations: Fully validated station records.
+        networkElements: Fully validated network element records.
+        outputDir: Target directory; created when missing.
+        logger: Logger for the status messages.
+        encoding: Output encoding (``utf-8-sig`` for an Excel-friendly BOM).
+        quoteAll: ``True`` puts every field in quotes.
 
     Returns:
-        Die Pfade beider geschriebener Dateien.
+        The paths of both written files.
 
     Raises:
-        ConversionError: Wenn das Verzeichnis oder eine Datei nicht schreibbar ist.
+        ConversionError: If the directory or a file is not writable.
     """
     quoting = csv.QUOTE_ALL if quoteAll else csv.QUOTE_MINIMAL
     try:

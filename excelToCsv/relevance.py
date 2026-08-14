@@ -1,8 +1,8 @@
-"""Dynamische Erkennung und Auswertung der ``Interesting/Relevant for``-Spalten.
+"""Dynamic detection and evaluation of the ``Interesting/Relevant for`` columns.
 
-Die Spaltennamen variieren zwischen Lieferungen, deshalb werden sie anhand
-eines Musters erkannt und der Betreiber-/Organisationsname aus dem Header
-extrahiert. Ergebnis ist pro Zeile eine echte JSON-Liste als String.
+The column names vary between deliveries, so they are detected by pattern and
+the operator/organisation name is extracted from the header. The result is a
+real JSON list per row, stored as a string.
 """
 
 from __future__ import annotations
@@ -21,13 +21,13 @@ from excelToCsv.normalize import collapseWhitespace, parseBoolean
 from excelToCsv.reader import columnValues
 from excelToCsv.schema import KNOWN_INPUT_COLUMNS
 
-#: Header, die auf eine Relevanz-Spalte hindeuten.
+#: Headers that indicate a relevance column.
 _RELEVANCE_PATTERN: Final = re.compile(r"relevant\s*for|interesting", re.IGNORECASE)
 
-#: Header-Präfixe, die trotz Treffer ausdrücklich ignoriert werden.
+#: Header prefixes that are explicitly ignored even when they match.
 _EXCLUDED_PREFIXES: Final[tuple[str, ...]] = ("interconnector",)
 
-#: Bekannte Fachspalten sind niemals Relevanz-Spalten.
+#: Known business columns are never relevance columns.
 _EXCLUDED_EXACT: Final[frozenset[str]] = frozenset(
     name.lower() for name in KNOWN_INPUT_COLUMNS
 )
@@ -35,30 +35,30 @@ _EXCLUDED_EXACT: Final[frozenset[str]] = frozenset(
 _LABEL_IN_PARENTHESES: Final = re.compile(r"\(([^)]*)\)")
 _LABEL_NOISE: Final = re.compile(r"interesting|relevant|\bfor\b", re.IGNORECASE)
 
-#: Ab dieser Spaltenanzahl lohnt die Bitmaske-Optimierung nicht mehr sicher.
+#: Beyond this column count the bitmask optimization is no longer safe.
 _MAX_PACKED_COLUMNS: Final = 62
 
 _EMPTY_LIST_JSON: Final = "[]"
 
 
 def toJsonList(values: list[str]) -> str:
-    """Serialisiert eine Werteliste als kompakte JSON-Liste (``["a","b"]``)."""
+    """Serialize a list of values as a compact JSON list (``["a","b"]``)."""
     return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
 
 
 @dataclass(frozen=True, slots=True)
 class RelevanceColumn:
-    """Zuordnung einer erkannten Inputspalte zu ihrem Organisationsnamen."""
+    """Mapping of a detected input column to its organisation name."""
 
     column: str
     label: str
 
 
 def extractRelevanceLabel(header: str) -> str:
-    """Extrahiert den Betreibernamen aus einem Relevanz-Header.
+    """Extract the operator name from a relevance header.
 
     ``"Interesting/Relevant for (50Hertz)"`` -> ``"50Hertz"``.
-    Ohne Klammern werden die Schlüsselwörter entfernt und der Rest verwendet.
+    Without parentheses the keywords are stripped and the remainder is used.
     """
     match = _LABEL_IN_PARENTHESES.search(header)
     if match and match.group(1).strip():
@@ -71,7 +71,7 @@ def extractRelevanceColumns(
     columns: list[str],
     logger: logging.Logger,
 ) -> list[RelevanceColumn]:
-    """Findet alle Relevanz-Spalten und ihre Labels in der Spaltenliste."""
+    """Find all relevance columns and their labels in the column list."""
     detected: list[RelevanceColumn] = []
     for column in columns:
         header = collapseWhitespace(str(column))
@@ -108,10 +108,10 @@ def buildRelevantFor(
     elementTypes: np.ndarray,
     collector: IssueCollector,
 ) -> np.ndarray:
-    """Baut die Spalte ``relevant für`` als JSON-Listen-Strings.
+    """Build the ``relevant für`` column as JSON list strings.
 
-    Unbekannte Boolean-Werte (z. B. ``maybe``, ``2``) werden NICHT als ``True``
-    interpretiert, sondern als ``WARNING`` gemeldet.
+    Unrecognized boolean values (e.g. ``maybe``, ``2``) are NOT interpreted as
+    ``True`` but reported as a ``WARNING``.
     """
     rowCount = len(frame)
     if rowCount == 0:
@@ -145,8 +145,8 @@ def buildRelevantFor(
             count=rowCount,
         )
 
-    # Jede Zeile wird auf eine Bitmaske reduziert; gleiche Muster teilen sich
-    # dieselbe JSON-Zeichenkette. Das spart bei großen Dateien viele Serialisierungen.
+    # Each row is reduced to a bitmask so identical patterns share one JSON
+    # string. On large files this saves a lot of serialization work.
     weights = (np.uint64(1) << np.arange(len(labels), dtype=np.uint64)).astype(np.int64)
     codes = flags.astype(np.int64) @ weights
     jsonByCode = {
@@ -159,7 +159,7 @@ def buildRelevantFor(
 
 
 def _uniqueLabels(labels: list[str], flags: object) -> list[str]:
-    """Sammelt die gesetzten Labels in Spaltenreihenfolge, ohne Dubletten."""
+    """Collect the set labels in column order, without duplicates."""
     selected: list[str] = []
     seen: set[str] = set()
     for label, flag in zip(labels, flags):  # type: ignore[arg-type]

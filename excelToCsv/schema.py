@@ -1,8 +1,7 @@
-"""Unveränderlicher Vertrag: Input-Anforderungen und exakte Output-Header.
+"""The immutable contract: input requirements and the exact output headers.
 
-Die Output-Spalten sind ein externer Vertrag. Schreibweise, Reihenfolge,
-Bindestriche, Leerzeichen, Groß-/Kleinschreibung und Umlaute dürfen NICHT
-verändert werden.
+The output columns are an external contract. Spelling, order, hyphens, spaces,
+capitalization and umlauts must NOT be changed.
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ COL_UCTE_CODE: Final = "UCTE CODE"
 COL_STARTLIFETIME: Final = "STARTLIFETIME"
 COL_ENDLIFETIME: Final = "ENDLIFETIME"
 
-#: Spalten, ohne die keine Conversion möglich ist.
+#: Columns without which no conversion is possible.
 REQUIRED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     COL_TSO,
     COL_ELEMENT_ID,
@@ -44,7 +43,7 @@ REQUIRED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     COL_ENDLIFETIME,
 )
 
-#: Bekannte, aber fachlich nicht ausgewertete Spalten. Dürfen fehlen.
+#: Known columns that carry no business logic here. They may be absent.
 IGNORED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     "Map Multipod",
     "ACTION",
@@ -54,7 +53,7 @@ IGNORED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     "OPC Map only",
 )
 
-#: Alle Spalten, deren kanonische Schreibweise wir kennen (für das Rename).
+#: Every column whose canonical spelling is known (used for the rename).
 KNOWN_INPUT_COLUMNS: Final[tuple[str, ...]] = REQUIRED_INPUT_COLUMNS + IGNORED_INPUT_COLUMNS
 
 # --------------------------------------------------------------------------- #
@@ -63,23 +62,23 @@ KNOWN_INPUT_COLUMNS: Final[tuple[str, ...]] = REQUIRED_INPUT_COLUMNS + IGNORED_I
 
 STATION_TYPE: Final = "SUB"
 
-#: Netzelement-Typen, bei denen BEIDE Stationsreferenzen zwingend sind.
+#: Network element types where BOTH station references are mandatory.
 BOTH_STATIONS_REQUIRED: Final[frozenset[str]] = frozenset({"LINE", "TRA", "TIE", "DCL"})
 
-#: Netzelement-Typen, bei denen fehlende Stationsreferenzen tolerierbar sind.
+#: Network element types where a missing station reference is tolerable.
 STATIONS_OPTIONAL: Final[frozenset[str]] = frozenset(
     {"CAP", "BUB", "GEN", "IND", "LOAD", "PPL", "PROD"}
 )
 
-#: Alle gültigen ELEMENT-TYPE-Werte (immer Uppercase).
+#: All valid ELEMENT-TYPE values (always uppercase).
 VALID_ELEMENT_TYPES: Final[frozenset[str]] = (
     frozenset({STATION_TYPE}) | BOTH_STATIONS_REQUIRED | STATIONS_OPTIONAL
 )
 
-#: Literalwert für eine fehlende, aber tolerierte Stationsreferenz.
+#: Literal written for a missing but tolerated station reference.
 MISSING_STATION_LITERAL: Final = "NaN"
 
-#: Exakte Strings für "reales UW".
+#: The exact strings for "reales UW".
 REAL_STATION_TRUE: Final = "Wahr"
 REAL_STATION_FALSE: Final = "Falsch"
 

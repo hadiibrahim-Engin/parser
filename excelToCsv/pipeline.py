@@ -1,12 +1,12 @@
-"""Orchestrierung der Conversion.
+"""Orchestration of the conversion.
 
-Fester Ablauf:
+The fixed order:
 
-    Excel lesen -> normalisieren -> Stationen erfassen -> Netzelemente erfassen
-    -> ALLE Validierungen -> erst dann beide CSV-Dateien schreiben.
+    read Excel -> normalize -> collect stations -> collect network elements
+    -> ALL validations -> only then write both CSV files.
 
-``convertTable`` ist frei von I/O und dadurch direkt testbar;
-``runConversion`` verbindet Lesen, Transformation und Schreiben.
+``convertTable`` is free of I/O and therefore directly testable;
+``runConversion`` ties reading, transformation and writing together.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ from excelToCsv.writer import writeCsvFiles
 
 @dataclass(slots=True)
 class ConversionResult:
-    """Ergebnis einer erfolgreichen Conversion."""
+    """The result of a successful conversion."""
 
     stations: pd.DataFrame
     networkElements: pd.DataFrame
@@ -63,11 +63,11 @@ class ConversionResult:
 
 
 def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
-    """Transformiert eine eingelesene Inputtabelle in beide Zieldatensätze.
+    """Transform a loaded input table into both target record sets.
 
-    Führt sämtliche Validierungen durch und wirft bei fatalen Befunden einen
-    :class:`~excelToCsv.errors.ConversionError`, bevor irgendetwas geschrieben
-    werden kann.
+    Runs every validation and raises a
+    :class:`~excelToCsv.errors.ConversionError` on fatal findings, before
+    anything could be written.
     """
     collector = IssueCollector(logger=logger)
     context = ConversionContext(
@@ -131,7 +131,7 @@ def runConversion(
     engine: str = DEFAULT_ENGINE,
     headerRow: int | None = None,
 ) -> ConversionResult:
-    """Vollständiger Lauf: Excel lesen, konvertieren, validieren, CSVs schreiben."""
+    """Full run: read Excel, convert, validate, write the CSV files."""
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
     result = convertTable(table, logger)
     result.stationsPath, result.networkElementsPath = writeCsvFiles(

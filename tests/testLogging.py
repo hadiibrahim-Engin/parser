@@ -1,4 +1,4 @@
-"""Tests des Log-Layouts: Quellenangabe, Einrückung, Blocktrennung."""
+"""Tests for the log layout: source location, indentation, block separation."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from excelToCsv.loggingSetup import (
 
 
 def makeRecord(message: str, level: int = logging.INFO) -> logging.LogRecord:
-    """Baut einen Log-Record, wie ihn ``logging`` erzeugen würde."""
+    """Build a log record the way ``logging`` would create it."""
     return logging.LogRecord(
         name="excelToCsv",
         level=level,
@@ -57,7 +57,7 @@ def testBlockIsIndentedAndSeparated(formatter: BlockFormatter) -> None:
     assert lines[0].endswith("Validation failed.")
     assert lines[1] == f"{CONTINUATION_INDENT}Row: 7"
     assert lines[2] == f"{CONTINUATION_INDENT}Field: Latitude"
-    # Abschließende Leerzeile setzt den Block vom Folgenden ab.
+    # The trailing blank line sets the block off from what follows.
     assert output.endswith("\n")
 
 
@@ -66,7 +66,7 @@ def testConsecutiveBlocksGetExactlyOneBlankLine(formatter: BlockFormatter) -> No
     second = formatter.format(makeRecord("B\ndetail"))
 
     assert first.endswith("\n")
-    assert not second.startswith("\n"), "der Vorgänger hat bereits abgesetzt"
+    assert not second.startswith("\n"), "the predecessor already separated it"
 
 
 def testBlockAfterSingleLineGetsLeadingBlankLine(formatter: BlockFormatter) -> None:
@@ -93,7 +93,7 @@ def testColoredOutputStillContainsTheMessage() -> None:
 
 
 def testErrorsReportTheDomainModuleNotTheCollector(logger: logging.Logger, logCapture: RecordingHandler) -> None:
-    """Die Quellenangabe muss auf das Fachmodul zeigen, nicht auf issues.py."""
+    """The source location must point at the domain module, not at issues.py."""
     with pytest.raises(ConversionError):
         convertRows([stationRow(Latitude="")], logger)
 
@@ -126,7 +126,7 @@ def testWarningsReportTheDomainModule(logger: logging.Logger, logCapture: Record
 
 
 def testDebugFileCapturesFullDetailRegardlessOfConsoleLevel(tmp_path: Path) -> None:
-    """Die Debug-Datei erhält DEBUG-Zeilen, auch wenn die Konsole auf WARNING steht."""
+    """The debug file receives DEBUG lines even when the console is at WARNING."""
     logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logging.WARNING)
     debugFile = tmp_path / "debug.log"

@@ -1,4 +1,4 @@
-"""Tests der dynamischen ``relevant für``-Logik (Fälle 19-21)."""
+"""Tests for the dynamic ``relevant für`` logic (cases 19-21)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ RELEVANCE_TENNET = "Interesting/Relevant for (TennetD)"
 
 
 def testRelevantForFromZeroAndOne(logger: logging.Logger) -> None:
-    """Fall 19: 0/1 als Boolean-Quelle."""
+    """Case 19: 0/1 as the boolean source."""
     row = stationRow(
         **{RELEVANCE_50HERTZ: 1, RELEVANCE_AMPRION: 0, RELEVANCE_TENNET: 1}
     )
@@ -24,7 +24,7 @@ def testRelevantForFromZeroAndOne(logger: logging.Logger) -> None:
 
 
 def testRelevantForFromTrueAndFalse(logger: logging.Logger) -> None:
-    """Fall 20: True/False als Boolean-Quelle."""
+    """Case 20: True/False as the boolean source."""
     row = stationRow(
         **{RELEVANCE_50HERTZ: "True", RELEVANCE_AMPRION: "false", RELEVANCE_TENNET: True}
     )
@@ -35,7 +35,7 @@ def testRelevantForFromTrueAndFalse(logger: logging.Logger) -> None:
 def testUnknownBooleanValueOnlyWarns(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Fall 21: unbekannter Boolean-Wert -> Warning, nicht TRUE."""
+    """Case 21: an unknown boolean value -> warning, not TRUE."""
     row = stationRow(**{RELEVANCE_50HERTZ: "maybe", RELEVANCE_AMPRION: 1})
     result = convertRows([row], logger)
 
@@ -70,7 +70,7 @@ def testWithoutRelevanceColumnsListStaysEmpty(logger: logging.Logger) -> None:
 
 
 def testIgnoredColumnsAreNotTreatedAsRelevance() -> None:
-    """``OPC INTERESTING ASSET`` darf nicht als Relevanz-Spalte gelten."""
+    """``OPC INTERESTING ASSET`` must not count as a relevance column."""
     columns = [
         "OPC INTERESTING ASSET",
         "OPC Map only",

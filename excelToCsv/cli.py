@@ -1,4 +1,4 @@
-"""Kommandozeilen-Schnittstelle des Converters.
+"""Command line interface of the converter.
 
     python converter.py input.xlsx
     python converter.py input.xlsx --output-dir ./output
@@ -15,14 +15,14 @@ from excelToCsv.errors import ConversionError
 from excelToCsv.loggingSetup import addDebugFileHandler, configureLogging
 from excelToCsv.pipeline import runConversion
 
-#: Exit-Codes.
+#: Exit codes.
 EXIT_SUCCESS = 0
 EXIT_UNEXPECTED = 1
 EXIT_CONVERSION_ERROR = 2
 
 
 def buildParser() -> argparse.ArgumentParser:
-    """Baut den Argument-Parser der CLI."""
+    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="converter.py",
         description="Converts an Excel network inventory into Stationen.csv and Netzelemente.csv.",
@@ -110,7 +110,7 @@ def buildParser() -> argparse.ArgumentParser:
 
 
 def resolveSheet(value: str | None) -> str | int | None:
-    """Interpretiert ``--sheet`` als Index, wenn es rein numerisch ist."""
+    """Interpret ``--sheet`` as an index when it is purely numeric."""
     if value is None:
         return None
     stripped = value.strip()
@@ -120,7 +120,7 @@ def resolveSheet(value: str | None) -> str | int | None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Einstiegspunkt der CLI. Liefert den Exit-Code zurück."""
+    """CLI entry point. Returns the exit code."""
     arguments = buildParser().parse_args(argv)
     logger = configureLogging(
         level=getattr(logging, arguments.logLevel),
@@ -142,9 +142,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             headerRow=arguments.headerRow,
         )
     except ConversionError:
-        # Die Ursache wurde bereits detailliert geloggt.
+        # The cause has already been logged in full detail.
         return EXIT_CONVERSION_ERROR
-    except KeyboardInterrupt:  # pragma: no cover - interaktiver Abbruch
+    except KeyboardInterrupt:  # pragma: no cover - interactive abort
         logger.critical("Conversion interrupted by user.")
         return EXIT_UNEXPECTED
     except Exception:

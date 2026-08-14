@@ -1,4 +1,4 @@
-"""Tests der Stationen-Transformation (Fälle 1-4, 8, 22)."""
+"""Tests for the station transformation (cases 1-4, 8, 22)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from excelToCsv.errors import ConversionError
 
 
 def testRealStationIsMappedCompletely(logger: logging.Logger) -> None:
-    """Fall 1: normale reale SUB-Station."""
+    """Case 1: a normal, real SUB station."""
     result = convertRows([stationRow()], logger)
 
     assert len(result.stations) == 1
@@ -39,7 +39,7 @@ def testRealStationIsMappedCompletely(logger: logging.Logger) -> None:
 
 
 def testVirtualStationIsFlagged(logger: logging.Logger) -> None:
-    """Fall 2: virtuelle X-Station -> reales UW = Falsch."""
+    """Case 2: virtual X station -> reales UW = Falsch."""
     result = convertRows(
         [stationRow(**{"ELEMENT ID": "Xb_380", "LONG-NAME": "X-Knoten b"})],
         logger,
@@ -50,7 +50,7 @@ def testVirtualStationIsFlagged(logger: logging.Logger) -> None:
 
 
 def testMissingLatitudeIsFatal(logger: logging.Logger, logCapture: RecordingHandler) -> None:
-    """Fall 3: SUB ohne Latitude."""
+    """Case 3: SUB without a latitude."""
     with pytest.raises(ConversionError):
         convertRows([stationRow(Latitude="")], logger)
 
@@ -64,7 +64,7 @@ def testMissingLatitudeIsFatal(logger: logging.Logger, logCapture: RecordingHand
 
 
 def testMissingLongitudeIsFatal(logger: logging.Logger, logCapture: RecordingHandler) -> None:
-    """Fall 4: SUB ohne Longitude."""
+    """Case 4: SUB without a longitude."""
     with pytest.raises(ConversionError):
         convertRows([stationRow(Longitude=None)], logger)
 
@@ -74,13 +74,13 @@ def testMissingLongitudeIsFatal(logger: logging.Logger, logCapture: RecordingHan
 
 
 def testVirtualStationAlsoRequiresCoordinates(logger: logging.Logger) -> None:
-    """Auch virtuelle Stationen brauchen Koordinaten."""
+    """Virtual stations need coordinates as well."""
     with pytest.raises(ConversionError):
         convertRows([stationRow(**{"ELEMENT ID": "Xb_380", "Latitude": ""})], logger)
 
 
 def testCoordinateWithDecimalCommaIsAccepted(logger: logging.Logger) -> None:
-    """Fall 5 (Ende-zu-Ende): Dezimalkomma wird zu Punkt normalisiert."""
+    """Case 5 (end to end): a decimal comma is normalized to a dot."""
     result = convertRows(
         [stationRow(Latitude="52,459373", Longitude="13,361402")],
         logger,
@@ -91,7 +91,7 @@ def testCoordinateWithDecimalCommaIsAccepted(logger: logging.Logger) -> None:
 
 
 def testStationVoltageIsJsonList(logger: logging.Logger) -> None:
-    """Fall 8: Stationen-Spannung als JSON-Liste."""
+    """Case 8: station voltage as a JSON list."""
     single = convertRows([stationRow(**{"VOLTAGE-LEVEL": "380.0"})], logger)
     assert single.stations.iloc[0]["Spannung"] == '["380"]'
 
@@ -103,7 +103,7 @@ def testStationVoltageIsJsonList(logger: logging.Logger) -> None:
 
 
 def testInvalidDateIsFatal(logger: logging.Logger, logCapture: RecordingHandler) -> None:
-    """Fall 10: ungültiges Datum."""
+    """Case 10: an invalid date."""
     with pytest.raises(ConversionError):
         convertRows([stationRow(STARTLIFETIME="irgendwann")], logger)
 
@@ -114,7 +114,7 @@ def testInvalidDateIsFatal(logger: logging.Logger, logCapture: RecordingHandler)
 
 
 def testDuplicateStationIdIsFatal(logger: logging.Logger, logCapture: RecordingHandler) -> None:
-    """Fall 22: doppelte Stations-ID nennt beide Zeilen."""
+    """Case 22: a duplicate station id names both rows."""
     with pytest.raises(ConversionError):
         convertRows(
             [
@@ -132,6 +132,82 @@ def testDuplicateStationIdIsFatal(logger: logging.Logger, logCapture: RecordingH
 def testStationWithoutElementIdIsFatal(logger: logging.Logger) -> None:
     with pytest.raises(ConversionError):
         convertRows([stationRow(**{"ELEMENT ID": ""})], logger)
+
+
+def testForgottenDecimalSeparatorIsRepaired(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    """A coordinate whose decimal separator was forgotten is fixed, with a warning."""
+    rows = [
+        stationRow(**{"ELEMENT ID": "A_380", "Latitude": "52.459373", "Longitude": "13.361402"}),
+        stationRow(**{"ELEMENT ID": "B_380", "Latitude": "53.551086", "Longitude": "9.993682"}),
+        stationRow(**{"ELEMENT ID": "C_380", "Latitude": "48123456", "Longitude": "11361402"}),
+    ]
+    result = convertRows(rows, logger)
+
+    repaired = result.stations.iloc[2]
+    assert repaired["lat"] == "48.123456"
+    assert repaired["long"] == "11.361402"
+
+    warnings = logCapture.text(logging.WARNING)
+    assert "Coordinate had no decimal separator" in warnings
+    assert "48123456 -> 48.123456" in warnings
+    assert "Action: Writing the corrected value 48.123456 and continuing." in warnings
+    assert "ELEMENT ID: C_380" in warnings
+    assert "Row: 4" in warnings
+    assert result.warningCount == 2, "one warning per repaired coordinate"
+
+
+def testRepairUsesTheColumnPrecisionNotTheWidestFit(logger: logging.Logger) -> None:
+    """With 5-decimal neighbours, 11361402 must become 113.61402, not 11.361402."""
+    rows = [
+        stationRow(**{"ELEMENT ID": "A_380", "Latitude": "48.12345", "Longitude": "113.61402"}),
+        stationRow(**{"ELEMENT ID": "B_380", "Latitude": "48.98765", "Longitude": "114.11111"}),
+        stationRow(**{"ELEMENT ID": "C_380", "Latitude": "4812345", "Longitude": "11361402"}),
+    ]
+    result = convertRows(rows, logger)
+
+    repaired = result.stations.iloc[2]
+    assert repaired["lat"] == "48.12345"
+    assert repaired["long"] == "113.61402"
+
+
+def testRepairIsFatalWithoutPrecisionEvidence(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    """Without an intact neighbour the precision is unknown - never guess."""
+    with pytest.raises(ConversionError):
+        convertRows([stationRow(**{"ELEMENT ID": "C_380", "Latitude": "48123456"})], logger)
+
+    errors = logCapture.text(logging.ERROR)
+    assert "decimal separator appears to be missing" in errors
+
+
+def testValidWholeNumberCoordinateIsNotRepaired(logger: logging.Logger) -> None:
+    """52 is a legitimate latitude and must survive untouched."""
+    rows = [
+        stationRow(**{"ELEMENT ID": "A_380", "Latitude": "52.459373", "Longitude": "13.361402"}),
+        stationRow(**{"ELEMENT ID": "B_380", "Latitude": "52", "Longitude": "13"}),
+    ]
+    result = convertRows(rows, logger)
+
+    assert result.stations.iloc[1]["lat"] == "52"
+    assert result.stations.iloc[1]["long"] == "13"
+    assert result.warningCount == 0
+
+
+def testOutOfRangeWithSeparatorRemainsFatal(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    """A genuine out-of-range value must not be silently reinterpreted."""
+    rows = [
+        stationRow(**{"ELEMENT ID": "A_380", "Latitude": "52.459373", "Longitude": "13.361402"}),
+        stationRow(**{"ELEMENT ID": "B_380", "Latitude": "152.5", "Longitude": "13.361402"}),
+    ]
+    with pytest.raises(ConversionError):
+        convertRows(rows, logger)
+
+    assert "Coordinate is out of range." in logCapture.text(logging.ERROR)
 
 
 def testStationCountsAreLogged(logger: logging.Logger, logCapture: RecordingHandler) -> None:

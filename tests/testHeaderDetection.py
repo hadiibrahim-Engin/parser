@@ -1,4 +1,4 @@
-"""Tests der automatischen Erkennung der Kopfzeile."""
+"""Tests for the automatic header row detection."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from excelToCsv.pipeline import runConversion
 from excelToCsv.reader import buildInputTable
 from excelToCsv.schema import STATIONS_FILENAME
 
-#: Typischer Vorspann: Titel, Metadaten, Leerzeile.
+#: A typical preamble: title, metadata, blank line.
 PREAMBLE = [
     ["Netzinventar Export"],
     ["Stand: 14.08.2026", "", "Verantwortlich: Netzplanung"],
@@ -30,7 +30,7 @@ PREAMBLE = [
 
 
 def sampleRows() -> list[dict[str, object]]:
-    """Zwei Stationen und ein Netzelement."""
+    """Two stations and one network element."""
     return [
         stationRow(),
         stationRow(
@@ -49,7 +49,7 @@ def sampleRows() -> list[dict[str, object]]:
 def testHeaderInFifthRowIsDetected(
     tmp_path: Path, logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Kopfzeile in Zeile 5: alles darüber wird verworfen."""
+    """Header in row 5: everything above it is discarded."""
     inputFile = writeExcelWithPreamble(sampleRows(), tmp_path / "input.xlsx", PREAMBLE)
 
     result = runConversion(inputFile, tmp_path / "out", logger)
@@ -79,7 +79,7 @@ def testRowNumbersMatchTheRealExcelRow(
     logger: logging.Logger,
     logCapture: RecordingHandler,
 ) -> None:
-    """Fehlermeldungen müssen die echte Excel-Zeile nennen, nicht die Position."""
+    """Messages must name the real Excel row, not the position in the data."""
     preamble = [[f"Vorspann {index}"] for index in range(preambleLength)]
     rows = [*sampleRows(), stationRow(**{"ELEMENT ID": "Kaputt_380", "Latitude": ""})]
     inputFile = writeExcelWithPreamble(rows, tmp_path / "input.xlsx", preamble)
@@ -87,8 +87,8 @@ def testRowNumbersMatchTheRealExcelRow(
     with pytest.raises(ConversionError):
         runConversion(inputFile, tmp_path / "out", logger)
 
-    # Kopfzeile = preambleLength + 1, erste Datenzeile = preambleLength + 2,
-    # die fehlerhafte Zeile ist die vierte Datenzeile.
+    # Header = preambleLength + 1, first data row = preambleLength + 2,
+    # and the faulty row is the fourth data row.
     expectedRow = preambleLength + 2 + 3
     errors = logCapture.text(logging.ERROR)
     assert f"Row: {expectedRow}" in errors
@@ -139,7 +139,7 @@ def testExplicitHeaderRowOutOfRangeFails(
 def testWorkbookWithoutHeaderIsReported(
     tmp_path: Path, logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Ohne erkennbare Kopfzeile bricht die Conversion mit klarem Hinweis ab."""
+    """Without a detectable header the conversion aborts with a clear hint."""
     import pandas as pd
 
     inputFile = tmp_path / "input.xlsx"
@@ -159,7 +159,7 @@ def testWorkbookWithoutHeaderIsReported(
 def testIncompleteHeaderWarnsAndNamesTheMissingColumns(
     tmp_path: Path, logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Eine schwach passende Kopfzeile führt zur präzisen Fehlliste, nicht zu 'nicht gefunden'."""
+    """A weak header yields the precise missing-column list, not "not found"."""
     import pandas as pd
 
     inputFile = tmp_path / "input.xlsx"
@@ -183,7 +183,7 @@ def testEmptyRowsBetweenPreambleAndHeader(tmp_path: Path, logger: logging.Logger
 
 
 def testPreambleMentioningColumnNamesDoesNotWin(tmp_path: Path, logger: logging.Logger) -> None:
-    """Ein Vorspanntext mit einzelnen Spaltennamen darf die Kopfzeile nicht verdrängen."""
+    """Preamble text naming a few columns must not outrank the real header."""
     preamble = [["TSO"], ["ELEMENT ID", "LONG-NAME"], ["Latitude", "Longitude", "Station 1"]]
     inputFile = writeExcelWithPreamble(sampleRows(), tmp_path / "input.xlsx", preamble)
 
@@ -192,7 +192,7 @@ def testPreambleMentioningColumnNamesDoesNotWin(tmp_path: Path, logger: logging.
 
 
 def testUnnamedHeaderCellsAreTolerated(tmp_path: Path, logger: logging.Logger) -> None:
-    """Leere Zellen in der Kopfzeile bekommen einen Platzhalternamen."""
+    """Empty cells in the header row get a placeholder name."""
     rows = [{**row, "": "Zusatzspalte"} for row in sampleRows()]
     inputFile = writeExcelWithPreamble(rows, tmp_path / "input.xlsx", PREAMBLE)
 

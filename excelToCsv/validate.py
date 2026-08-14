@@ -1,7 +1,7 @@
-"""Alle Validierungen, die über eine einzelne Zelle hinausgehen.
+"""All validations that reach beyond a single cell.
 
-Bewusst getrennt von der Transformation: Erst werden alle Datensätze gebaut,
-dann vollständig geprüft, und erst danach darf geschrieben werden.
+Deliberately separated from the transformation: first every record is built,
+then everything is checked, and only afterwards may anything be written.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def validateElementTypes(
     rows: RowSet,
     collector: IssueCollector,
 ) -> None:
-    """Meldet jeden unbekannten ``ELEMENT-TYPE`` als fatalen Fehler."""
+    """Report every unknown ``ELEMENT-TYPE`` as a fatal error."""
     expected = ", ".join(sorted(VALID_ELEMENT_TYPES))
     for position, elementType in enumerate(elementTypes):
         if elementType not in VALID_ELEMENT_TYPES:
@@ -42,10 +42,10 @@ def validateElementTypes(
 
 
 def buildStationIndex(rows: RowSet, collector: IssueCollector) -> dict[str, int]:
-    """Baut den Index ``ELEMENT ID -> Excel-Zeile`` über alle ``SUB``-Zeilen.
+    """Build the ``ELEMENT ID -> Excel row`` index over all ``SUB`` rows.
 
-    Doppelte Stations-IDs werden nicht stillschweigend überschrieben, sondern
-    unter Angabe aller betroffenen Zeilen als fataler Fehler gemeldet.
+    Duplicate station ids are not silently overwritten but reported as a fatal
+    error naming every affected row.
     """
     positionsById: dict[str, list[int]] = {}
     for position, elementId in enumerate(rows.elementIds):
@@ -74,10 +74,10 @@ def validateDuplicateNetworkElements(
     frame: pd.DataFrame,
     collector: IssueCollector,
 ) -> None:
-    """Prüft doppelte Netzelement-IDs.
+    """Check duplicate network element ids.
 
-    Vollständig identische Datensätze sind tolerierbar (``WARNING``);
-    widersprüchliche Datensätze mit gleicher ID sind fatal.
+    Fully identical records are tolerable (``WARNING``); conflicting records
+    sharing an id are fatal.
     """
     positionsById: dict[str, list[int]] = {}
     for position, elementId in enumerate(rows.elementIds):
@@ -116,7 +116,7 @@ def validateStationReferences(
     stationIndex: dict[str, int],
     collector: IssueCollector,
 ) -> None:
-    """Prüft, dass jede gesetzte Stationsreferenz auf eine ``SUB``-Zeile zeigt."""
+    """Check that every populated station reference points at a ``SUB`` row."""
     for column in (COL_STATION_1, COL_STATION_2):
         for position, reference in enumerate(textColumn(rows.frame, column)):
             if not reference or reference in stationIndex:
@@ -139,10 +139,10 @@ def validateOutputSchema(
     name: str,
     context: ConversionContext,
 ) -> None:
-    """Prüft Zielspalten, Reihenfolge und die Abwesenheit von NA-Werten.
+    """Check target columns, their order and the absence of NA values.
 
     Raises:
-        ConversionError: Bei Abweichungen vom vereinbarten Output-Vertrag.
+        ConversionError: On any deviation from the agreed output contract.
     """
     actual = tuple(frame.columns)
     if actual != columns:

@@ -1,4 +1,4 @@
-"""Transformation aller Nicht-``SUB``-Zeilen nach ``Netzelemente.csv``."""
+"""Transformation of all non-``SUB`` rows into ``Netzelemente.csv``."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _normalizeDateColumn(
     targetColumn: str,
     context: ConversionContext,
 ) -> np.ndarray:
-    """Normalisiert eine Datumsspalte auf ``TT.MM.JJJJ``; Defekte sind fatal."""
+    """Normalize a date column to ``DD.MM.YYYY``; defects are fatal."""
     raw = columnValues(rows.frame, column)
     values, failures = applyNormalizer(raw, normalizeDate)
     for position, error in failures:
@@ -50,12 +50,12 @@ def resolveStationReferences(
     column: str,
     context: ConversionContext,
 ) -> np.ndarray:
-    """Bestimmt die Ausgabewerte einer Stationsreferenz-Spalte.
+    """Determine the output values of a station reference column.
 
-    * Pflichttyp (LINE/TRA/TIE/DCL) ohne Referenz -> fataler Fehler.
-    * Sonstiger Typ ohne Referenz -> Literal ``NaN`` plus ``WARNING``.
-    * Vorhandene Referenz -> unveränderte Übernahme (Existenzprüfung erfolgt
-      später in :mod:`excelToCsv.validate`).
+    * Mandatory type (LINE/TRA/TIE/DCL) without a reference -> fatal error.
+    * Any other type without a reference -> literal ``NaN`` plus a ``WARNING``.
+    * Existing reference -> taken over unchanged (its existence is checked later
+      in :mod:`excelToCsv.validate`).
     """
     values = textColumn(rows.frame, column)
     result = np.empty(len(values), dtype=object)
@@ -87,7 +87,7 @@ def resolveStationReferences(
 
 
 def convertNetworkElements(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
-    """Baut den Netzelemente-Datensatz aus allen gültigen Nicht-``SUB``-Zeilen."""
+    """Build the network element records from all valid non-``SUB`` rows."""
     rowCount = len(rows)
     context.logger.info("Found %d network element(s).", rowCount)
 

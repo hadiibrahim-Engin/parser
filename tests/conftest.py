@@ -1,4 +1,4 @@
-"""Gemeinsame Test-Fixtures und Datenfabriken."""
+"""Shared test fixtures and data factories."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from excelToCsv.schema import REQUIRED_INPUT_COLUMNS  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-#: Standardwerte einer Stationszeile.
+#: Default values of a station row.
 STATION_DEFAULTS: dict[str, Any] = {
     "TSO": "Amprion",
     "ELEMENT ID": "Berlin_380",
@@ -43,7 +43,7 @@ STATION_DEFAULTS: dict[str, Any] = {
     "ENDLIFETIME": "",
 }
 
-#: Standardwerte einer Netzelementzeile.
+#: Default values of a network element row.
 ELEMENT_DEFAULTS: dict[str, Any] = {
     **STATION_DEFAULTS,
     "ELEMENT ID": "LINE_471",
@@ -58,17 +58,17 @@ ELEMENT_DEFAULTS: dict[str, Any] = {
 
 
 def stationRow(**overrides: Any) -> dict[str, Any]:
-    """Erzeugt eine SUB-Zeile mit sinnvollen Standardwerten."""
+    """Build a SUB row with sensible defaults."""
     return {**STATION_DEFAULTS, **overrides}
 
 
 def elementRow(**overrides: Any) -> dict[str, Any]:
-    """Erzeugt eine Netzelement-Zeile mit sinnvollen Standardwerten."""
+    """Build a network element row with sensible defaults."""
     return {**ELEMENT_DEFAULTS, **overrides}
 
 
 def columnsOf(rows: list[dict[str, Any]]) -> list[str]:
-    """Vereinigt die Schlüssel aller Zeilen unter Beibehaltung der Reihenfolge."""
+    """Union of all row keys, preserving their order."""
     if not rows:
         return list(REQUIRED_INPUT_COLUMNS)
     columns: list[str] = []
@@ -80,7 +80,7 @@ def columnsOf(rows: list[dict[str, Any]]) -> list[str]:
 
 
 def makeTable(rows: list[dict[str, Any]], logger: logging.Logger) -> InputTable:
-    """Baut ein ``InputTable`` aus Zeilen-Dicts – ohne Excel-Datei."""
+    """Build an ``InputTable`` from row dicts - without any Excel file."""
     columns = columnsOf(rows)
     frame = pd.DataFrame([{column: row.get(column, "") for column in columns} for row in rows],
                          columns=columns, dtype=object)
@@ -93,12 +93,12 @@ def makeTable(rows: list[dict[str, Any]], logger: logging.Logger) -> InputTable:
 
 
 def convertRows(rows: list[dict[str, Any]], logger: logging.Logger) -> ConversionResult:
-    """Konvertiert Zeilen-Dicts direkt (Transformation ohne I/O)."""
+    """Convert row dicts directly (transformation without I/O)."""
     return convertTable(makeTable(rows, logger), logger)
 
 
 def writeExcel(rows: list[dict[str, Any]], path: Path, sheetName: str = "Tabelle1") -> Path:
-    """Schreibt Zeilen-Dicts als Excel-Datei für End-to-End-Tests."""
+    """Write row dicts to an Excel file for end-to-end tests."""
     columns = columnsOf(rows)
     frame = pd.DataFrame([{column: row.get(column, "") for column in columns} for row in rows],
                          columns=columns)
@@ -112,7 +112,7 @@ def writeExcelWithPreamble(
     preamble: list[list[Any]],
     sheetName: str = "Tabelle1",
 ) -> Path:
-    """Schreibt eine Mappe, deren Kopfzeile erst unterhalb eines Vorspanns steht."""
+    """Write a workbook whose header row sits below a preamble."""
     columns = columnsOf(rows)
     grid: list[list[Any]] = []
     for line in preamble:
@@ -128,7 +128,7 @@ def writeExcelWithPreamble(
 
 
 class RecordingHandler(logging.Handler):
-    """Sammelt Log-Records, damit Tests Warnungen und Fehler prüfen können."""
+    """Collect log records so tests can assert on warnings and errors."""
 
     def __init__(self) -> None:
         super().__init__(level=logging.DEBUG)
@@ -138,17 +138,17 @@ class RecordingHandler(logging.Handler):
         self.records.append(record)
 
     def messages(self, level: int) -> list[str]:
-        """Liefert alle formatierten Meldungen eines Levels."""
+        """Return all formatted messages of one level."""
         return [record.getMessage() for record in self.records if record.levelno == level]
 
     def text(self, level: int) -> str:
-        """Alle Meldungen eines Levels als ein Textblock (für ``in``-Prüfungen)."""
+        """All messages of one level as a single block (for ``in`` assertions)."""
         return "\n".join(self.messages(level))
 
 
 @pytest.fixture()
 def logCapture() -> Iterator[RecordingHandler]:
-    """Hängt einen aufzeichnenden Handler an den Converter-Logger."""
+    """Attach a recording handler to the converter logger."""
     handler = RecordingHandler()
     logger = logging.getLogger(LOGGER_NAME)
     previousLevel = logger.level
@@ -163,5 +163,5 @@ def logCapture() -> Iterator[RecordingHandler]:
 
 @pytest.fixture()
 def logger(logCapture: RecordingHandler) -> logging.Logger:
-    """Converter-Logger ohne Konsolenausgabe, aber mit Aufzeichnung."""
+    """Converter logger without console output, but with recording."""
     return logging.getLogger(LOGGER_NAME)
