@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "excel-to-csv-converter"
+version = "1.0.0"
+description = "Converts an Excel network inventory into Stationen.csv and Netzelemente.csv"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "colorlog>=6.7",
+]
+
+[project.optional-dependencies]
+# Optionaler Beschleuniger: liest große Arbeitsmappen ca. 5x schneller als openpyxl.
+fast = ["python-calamine>=0.2"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+excel-to-csv = "excelToCsv.cli:main"
+
+[tool.setuptools]
+packages = ["excelToCsv"]
+
+[tool.pytest.ini_options]
+# Die Testdateien folgen der camelCase-Konvention dieses Projekts.
+python_files = ["test*.py"]
+python_functions = ["test*"]
+testpaths = ["tests"]
+addopts = "-q"
