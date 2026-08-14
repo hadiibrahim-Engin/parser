@@ -172,15 +172,62 @@ def testRepairUsesTheColumnPrecisionNotTheWidestFit(logger: logging.Logger) -> N
     assert repaired["long"] == "113.61402"
 
 
-def testRepairIsFatalWithoutPrecisionEvidence(
+def testWithoutPrecisionEvidenceThePositionIsGuessed(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Without an intact neighbour the precision is unknown - never guess."""
-    with pytest.raises(ConversionError):
-        convertRows([stationRow(**{"ELEMENT ID": "C_380", "Latitude": "48123456"})], logger)
+    """No intact neighbour: the separator is guessed and flagged for verification."""
+    result = convertRows(
+        [stationRow(**{"ELEMENT ID": "C_380", "Latitude": "48123456"})], logger
+    )
 
-    errors = logCapture.text(logging.ERROR)
-    assert "decimal separator appears to be missing" in errors
+    assert result.stations.iloc[0]["lat"] == "48.123456"
+    warnings = logCapture.text(logging.WARNING)
+    assert "the separator was GUESSED" in warnings
+    assert "PLEASE VERIFY" in warnings
+    assert "contains no value with a decimal separator" in warnings
+
+
+def testGuessCanBeWrongAndSaysSo(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    """Documents the known limit: a 1-digit longitude comes back one digit too wide.
+
+    9.993682 written as 9993682 becomes 99.93682, because the longitude range
+    permits three integer digits. The value is still written, but the warning
+    tells the user to verify it.
+    """
+    result = convertRows(
+        [stationRow(**{"ELEMENT ID": "C_380", "Latitude": "48123456", "Longitude": "9993682"})],
+        logger,
+    )
+
+    assert result.stations.iloc[0]["long"] == "99.93682"
+    assert "PLEASE VERIFY" in logCapture.text(logging.WARNING)
+
+
+def testPrecisionEvidenceBeatsTheGuess(logger: logging.Logger) -> None:
+    """One intact neighbour is enough to replace the guess with a derived value."""
+    rows = [
+        stationRow(**{"ELEMENT ID": "A_380", "Latitude": "48.123456", "Longitude": "9.993682"}),
+        stationRow(**{"ELEMENT ID": "C_380", "Latitude": "48123456", "Longitude": "9993682"}),
+    ]
+    result = convertRows(rows, logger)
+
+    repaired = result.stations.iloc[1]
+    assert repaired["lat"] == "48.123456"
+    assert repaired["long"] == "9.993682", "derived from the column, not guessed"
+
+
+def testUnplaceableCoordinateStaysFatal(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    """If no separator position lands inside the range, the guess must not save it."""
+    with pytest.raises(ConversionError):
+        convertRows(
+            [stationRow(**{"ELEMENT ID": "C_380", "Latitude": "999999999999999999"})], logger
+        )
+
+    assert "No decimal separator could be placed" in logCapture.text(logging.ERROR)
 
 
 def testValidWholeNumberCoordinateIsNotRepaired(logger: logging.Logger) -> None:

@@ -9,6 +9,8 @@ import pytest
 
 from excelToCsv.errors import NormalizationError
 from excelToCsv.normalize import (
+    LATITUDE_RANGE,
+    LONGITUDE_RANGE,
     decimalPlaceCount,
     isVirtualStation,
     normalizeCoordinate,
@@ -19,6 +21,7 @@ from excelToCsv.normalize import (
     normalizeText,
     normalizeVoltage,
     parseBoolean,
+    repairByWidestFit,
     splitStationId,
     splitVoltages,
 )
@@ -142,9 +145,53 @@ def testMissingSeparatorUsesTheGivenPrecisionNotTheWidestFit() -> None:
 
 
 def testMissingSeparatorIsFatalWithoutPrecisionEvidence() -> None:
+    """Without precision and without the explicit opt-in, nothing is guessed."""
     with pytest.raises(NormalizationError) as excinfo:
         normalizeLatitude("52459373")
     assert "decimal separator appears to be missing" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------- #
+# Last resort: guessing the position
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("digits", "limits", "expected"),
+    [
+        ("185737", LATITUDE_RANGE, "18.5737"),
+        ("52459373", LATITUDE_RANGE, "52.459373"),
+        ("-52459373", LATITUDE_RANGE, "-52.459373"),
+        ("13361402", LONGITUDE_RANGE, "133.61402"),
+        ("9993682", LONGITUDE_RANGE, "99.93682"),
+        ("999999999999999999", LATITUDE_RANGE, None),  # nothing fits
+        ("52a459373", LATITUDE_RANGE, None),  # not pure digits
+    ],
+)
+def testRepairByWidestFit(
+    digits: str, limits: tuple[float, float], expected: str | None
+) -> None:
+    """The separator goes as far right as the range still allows."""
+    assert repairByWidestFit(digits, limits) == expected
+
+
+def testWidestFitNeedsTheExplicitOptIn() -> None:
+    with pytest.raises(NormalizationError):
+        normalizeCoordinate("185737", limits=LATITUDE_RANGE)
+
+    guessed = normalizeCoordinate("185737", limits=LATITUDE_RANGE, allowWidestFit=True)
+    assert guessed.text == "18.5737"
+    assert "GUESSED" in guessed.repair
+    assert "PLEASE VERIFY" in guessed.repair
+
+
+def testPrecisionWinsOverTheGuess() -> None:
+    """With a known precision the guess is never consulted."""
+    derived = normalizeCoordinate(
+        "9993682", limits=LONGITUDE_RANGE, decimalPlaces=6, allowWidestFit=True
+    )
+    assert derived.text == "9.993682"
+    assert "GUESSED" not in derived.repair
 
 
 def testValueInRangeIsNeverRepaired() -> None:

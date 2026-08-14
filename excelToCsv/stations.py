@@ -12,6 +12,7 @@ from excelToCsv.errors import NormalizationError
 from excelToCsv.normalize import (
     LATITUDE_RANGE,
     LONGITUDE_RANGE,
+    STATION_ID_SEPARATOR,
     decimalPlaceCount,
     isVirtualStation,
     normalizeCoordinate,
@@ -36,6 +37,20 @@ from excelToCsv.schema import (
     REAL_STATION_TRUE,
     STATION_COLUMNS,
 )
+
+
+def buildFallbackStationName(longName: str, elementId: str) -> str:
+    """Build a station name for an ELEMENT ID that breaks the naming convention.
+
+    The regular station name comes straight from ``LONG-NAME``. When the
+    ``ELEMENT ID`` does not follow ``<name>_<voltage>`` it carries no voltage
+    level, so the name is assembled as ``<LONG-NAME>_<ELEMENT ID>`` instead.
+    Without a long name the plain ELEMENT ID remains, since a leading separator
+    would only add noise.
+    """
+    if not longName:
+        return elementId
+    return f"{longName}{STATION_ID_SEPARATOR}{elementId}"
 
 
 def dominantDecimalPlaces(counts: Counter[int]) -> int | None:
@@ -65,9 +80,12 @@ def _normalizeCoordinateColumn(
     Runs in two passes. The first pass normalizes everything that is already
     well-formed and records how many decimal places this column uses. The second
     pass retries only the failures, using that precision to reinsert a decimal
-    separator that was forgotten when the sheet was filled in. Every repair is
-    reported as a ``WARNING`` with the full row context; whatever still fails is
-    reported as a fatal error.
+    separator that was forgotten when the sheet was filled in.
+
+    If not a single value of the column carries a separator there is no precision
+    to derive, and the position is guessed instead (as far right as the range
+    allows). Every repair - derived or guessed - is reported as a ``WARNING`` with
+    the full row context; whatever still fails is reported as a fatal error.
     """
     raw = columnValues(rows.frame, column)
     values = np.empty(len(raw), dtype=object)
@@ -88,11 +106,20 @@ def _normalizeCoordinateColumn(
             repairs.append((position, outcome.repair))
 
     decimalPlaces = dominantDecimalPlaces(precisionCounts)
-    if failures and decimalPlaces is not None:
+    if failures:
+        if decimalPlaces is None:
+            context.logger.warning(
+                "Column %r contains no value with a decimal separator, so its precision "
+                "is unknown. Separator positions will be guessed and must be verified.",
+                column,
+            )
         for position in list(failures):
             try:
                 outcome = normalizeCoordinate(
-                    raw[position], limits=limits, decimalPlaces=decimalPlaces
+                    raw[position],
+                    limits=limits,
+                    decimalPlaces=decimalPlaces,
+                    allowWidestFit=decimalPlaces is None,
                 )
             except NormalizationError as error:
                 failures[position] = error
@@ -176,11 +203,17 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
         count=rowCount,
     )
 
+    longNames = textColumn(rows.frame, COL_LONG_NAME)
+    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
+
     realStation = np.empty(rowCount, dtype=object)
+    stationNames = np.empty(rowCount, dtype=object)
     for position, elementId in enumerate(elementIds):
+        stationNames[position] = longNames[position]
         if not elementId:
             realStation[position] = REAL_STATION_TRUE
             continue
+
         virtual = isVirtualStation(elementId)
         realStation[position] = REAL_STATION_FALSE if virtual else REAL_STATION_TRUE
         if virtual:
@@ -192,16 +225,20 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
                 name,
                 REAL_STATION_FALSE,
             )
-        elif "_" not in elementId:
-            context.logger.warning(
-                "Row %d: station ELEMENT ID %r does not follow '<name>_<voltage>'; "
-                "the full ID was used as the station name.",
-                rows.rowNumbers[position],
-                elementId,
+
+        if STATION_ID_SEPARATOR not in elementId:
+            stationNames[position] = buildFallbackStationName(
+                longNames[position], elementId
+            )
+            context.collector.warning(
+                "Station ELEMENT ID does not follow the '<name>_<voltage>' convention.",
+                field=COL_ELEMENT_ID,
+                value=elementId,
+                expected="An ELEMENT ID of the form <name>_<voltage>, e.g. Berlin_380.",
+                action=f"Using '{stationNames[position]}' as the station name.",
+                **rows.context(position),
             )
 
-    longNames = textColumn(rows.frame, COL_LONG_NAME)
-    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
     relevantFor = buildRelevantFor(
         rows.frame,
         context.relevanceColumns,
@@ -214,13 +251,13 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
     data = {
         "Eigentümer": textColumn(rows.frame, COL_TSO),
         "MJAP-ID": elementIds,
-        "Stationsname - Langname": longNames,
+        "Stationsname - Langname": stationNames,
         "lat": latitudes,
         "long": longitudes,
         "Spannung": voltages,
         "IBN": startDates,
         "ABN": endDates,
-        "Stationsname - Kurzname": longNames,
+        "Stationsname - Kurzname": stationNames,
         "reales UW": realStation,
         "Stationsname - OPC-Name": emptyColumn(rowCount),
         "ID-GUID intern-1": emptyColumn(rowCount),

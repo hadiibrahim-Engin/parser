@@ -98,8 +98,7 @@ def testWrittenCsvContentIsClean(tmp_path: Path, logger: logging.Logger) -> None
     # Round trip: the CSV field yields exactly the JSON list again.
     assert records[0]["Spannung"] == '["380"]'
     assert json.loads(records[0]["Spannung"]) == ["380"]
-    assert records[1]["relevant für"] == '["50Hertz"]'
-    assert json.loads(records[1]["relevant für"]) == ["50Hertz"]
+    assert records[1]["relevant für"] == "50Hertz"
     assert all("nan" not in value.lower() for record in records for value in record.values())
 
     with (tmp_path / "out" / NETWORK_ELEMENTS_FILENAME).open(

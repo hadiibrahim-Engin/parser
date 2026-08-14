@@ -131,6 +131,11 @@ _COORDINATE_EXPECTATION: Final = (
     "A decimal number using '.' or ',' as decimal separator."
 )
 
+#: Longest digit sequence still plausible as a coordinate that lost its separator.
+#: A longitude uses at most 3 integer digits, and 9 decimals already resolve well
+#: below a millimetre - anything longer is corrupt data, not a missing separator.
+MAX_GUESSABLE_DIGITS: Final = 12
+
 
 @dataclass(frozen=True, slots=True)
 class CoordinateValue:
@@ -183,11 +188,47 @@ def repairMissingSeparator(
     return repaired
 
 
+def repairByWidestFit(text: str, limits: tuple[float, float]) -> str | None:
+    """Guess the separator position: as far right as the valid range still allows.
+
+    Last-resort fallback for a column in which no single value carries a decimal
+    separator, so there is no precision to derive. ``185737`` becomes ``18.5737``
+    for a latitude.
+
+    This is a **guess, not a reconstruction**. It is right whenever the original
+    integer part used the maximum number of digits the range permits, and wrong
+    otherwise: a longitude of ``9.993682`` written as ``9993682`` comes back as
+    ``99.93682``, because the range allows three integer digits. Callers must
+    surface the result as a warning telling the user to verify it.
+
+    Because a single-digit integer part always fits, this rule would otherwise
+    "repair" any digit sequence whatsoever. Sequences longer than
+    :data:`MAX_GUESSABLE_DIGITS` are therefore rejected as corrupt data rather
+    than turned into an implausibly precise coordinate.
+
+    Returns:
+        The guessed text, or ``None`` if the value is not plausibly a coordinate
+        or no placement lands inside the range.
+    """
+    sign = "-" if text.startswith("-") else ""
+    digits = text.lstrip("+-")
+    if not digits.isdigit() or len(digits) > MAX_GUESSABLE_DIGITS:
+        return None
+
+    low, high = limits
+    for integerDigits in range(len(digits) - 1, 0, -1):
+        candidate = f"{sign}{digits[:integerDigits]}.{digits[integerDigits:]}"
+        if low <= float(candidate) <= high:
+            return candidate
+    return None
+
+
 def normalizeCoordinate(
     value: object,
     *,
     limits: tuple[float, float],
     decimalPlaces: int | None = None,
+    allowWidestFit: bool = False,
 ) -> CoordinateValue:
     """Normalize a coordinate to use a dot as the decimal separator.
 
@@ -200,7 +241,8 @@ def normalizeCoordinate(
     * both ``.`` and ``,`` present - the last separator is taken as the decimal
       separator,
     * decimal separator missing entirely and the value therefore out of range -
-      the separator is reinserted using ``decimalPlaces``.
+      the separator is reinserted using ``decimalPlaces``, or guessed via
+      :func:`repairByWidestFit` when ``allowWidestFit`` is set.
 
     A value that is out of range but *does* carry a decimal separator is a
     genuine data error and is never repaired.
@@ -211,6 +253,8 @@ def normalizeCoordinate(
         decimalPlaces: Precision observed in the intact values of the same
             column, used to repair a missing separator. ``None`` disables that
             repair.
+        allowWidestFit: Permit the last-resort guess when no precision is known.
+            Only meaningful together with ``decimalPlaces=None``.
 
     Raises:
         NormalizationError: If the value is empty, not numeric, or out of range
@@ -278,12 +322,25 @@ def normalizeCoordinate(
                     f"({text} -> {repaired})."
                 ),
             )
+    elif allowWidestFit:
+        repaired = repairByWidestFit(text, limits)
+        if repaired is not None:
+            return CoordinateValue(
+                text=repaired,
+                repair=(
+                    f"Coordinate had no decimal separator and no other row of this column "
+                    f"shows the intended precision - the separator was GUESSED by placing "
+                    f"it as far right as the valid range allows ({text} -> {repaired}). "
+                    f"PLEASE VERIFY: the guess is wrong whenever the true value has fewer "
+                    f"integer digits than the range permits."
+                ),
+            )
 
     raise NormalizationError(
         "Coordinate is out of range and its decimal separator appears to be missing.",
         (
-            f"A value between {low:g} and {high:g}. The separator can only be restored "
-            f"automatically when other rows of the same column show the intended precision."
+            f"A value between {low:g} and {high:g}. No decimal separator could be placed "
+            f"anywhere inside that range."
         ),
     )
 
@@ -409,6 +466,9 @@ def parseBoolean(value: object) -> bool | None:
 #: Prefix marking a virtual X node.
 _VIRTUAL_PREFIX: Final = "X"
 
+#: Separator between station name and voltage level inside an ``ELEMENT ID``.
+STATION_ID_SEPARATOR: Final = "_"
+
 
 def splitStationId(elementId: str) -> tuple[str, str]:
     """Split ``<stationName>_<voltageLevel>`` at the LAST ``_``.
@@ -416,7 +476,7 @@ def splitStationId(elementId: str) -> tuple[str, str]:
     Without an underscore the whole id counts as the station name and the
     voltage level is empty.
     """
-    name, separator, level = elementId.rpartition("_")
+    name, separator, level = elementId.rpartition(STATION_ID_SEPARATOR)
     if not separator:
         return elementId, ""
     return name, level

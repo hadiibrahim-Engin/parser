@@ -38,12 +38,27 @@ _LABEL_NOISE: Final = re.compile(r"interesting|relevant|\bfor\b", re.IGNORECASE)
 #: Beyond this column count the bitmask optimization is no longer safe.
 _MAX_PACKED_COLUMNS: Final = 62
 
-_EMPTY_LIST_JSON: Final = "[]"
+#: Separator between several organisations in ``relevant für``.
+RELEVANCE_SEPARATOR: Final = ";"
+
+_EMPTY_RELEVANCE: Final = ""
 
 
 def toJsonList(values: list[str]) -> str:
-    """Serialize a list of values as a compact JSON list (``["a","b"]``)."""
+    """Serialize a list of values as a compact JSON list (``["a","b"]``).
+
+    Still used for the station ``Spannung`` column, which stays a JSON list.
+    """
     return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+
+
+def joinRelevance(values: list[str]) -> str:
+    """Join the relevant organisations into one semicolon-separated field.
+
+    One organisation stays a plain name, several are written as ``a;b;c``, and
+    none produces an empty field.
+    """
+    return RELEVANCE_SEPARATOR.join(values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +111,9 @@ def extractRelevanceColumns(
             ", ".join(f"{item.column} -> {item.label}" for item in detected),
         )
     else:
-        logger.warning("No 'Interesting/Relevant for' column detected - 'relevant für' stays [].")
+        logger.warning(
+            "No 'Interesting/Relevant for' column detected - 'relevant für' stays empty."
+        )
     return detected
 
 
@@ -108,7 +125,10 @@ def buildRelevantFor(
     elementTypes: np.ndarray,
     collector: IssueCollector,
 ) -> np.ndarray:
-    """Build the ``relevant für`` column as JSON list strings.
+    """Build the ``relevant für`` column as semicolon-separated organisations.
+
+    Several organisations are written as ``50Hertz;TennetD``, a single one as a
+    plain name, and none as an empty field.
 
     Unrecognized boolean values (e.g. ``maybe``, ``2``) are NOT interpreted as
     ``True`` but reported as a ``WARNING``.
@@ -117,7 +137,7 @@ def buildRelevantFor(
     if rowCount == 0:
         return np.empty(0, dtype=object)
     if not relevanceColumns:
-        return np.full(rowCount, _EMPTY_LIST_JSON, dtype=object)
+        return np.full(rowCount, _EMPTY_RELEVANCE, dtype=object)
 
     flags = np.zeros((rowCount, len(relevanceColumns)), dtype=bool)
     for columnIndex, relevance in enumerate(relevanceColumns):
@@ -138,24 +158,24 @@ def buildRelevantFor(
             flags[position, columnIndex] = parsed
 
     labels = [item.label for item in relevanceColumns]
-    if len(labels) > _MAX_PACKED_COLUMNS:  # pragma: no cover - defensiver Fallback
+    if len(labels) > _MAX_PACKED_COLUMNS:  # pragma: no cover - defensive fallback
         return np.fromiter(
-            (toJsonList(_uniqueLabels(labels, row)) for row in flags),
+            (joinRelevance(_uniqueLabels(labels, row)) for row in flags),
             dtype=object,
             count=rowCount,
         )
 
-    # Each row is reduced to a bitmask so identical patterns share one JSON
-    # string. On large files this saves a lot of serialization work.
+    # Each row is reduced to a bitmask so identical patterns share one joined
+    # string. On large files this saves a lot of string building.
     weights = (np.uint64(1) << np.arange(len(labels), dtype=np.uint64)).astype(np.int64)
     codes = flags.astype(np.int64) @ weights
-    jsonByCode = {
-        int(code): toJsonList(
+    textByCode = {
+        int(code): joinRelevance(
             _uniqueLabels(labels, [(int(code) >> bit) & 1 for bit in range(len(labels))])
         )
         for code in np.unique(codes)
     }
-    return np.fromiter((jsonByCode[int(code)] for code in codes), dtype=object, count=rowCount)
+    return np.fromiter((textByCode[int(code)] for code in codes), dtype=object, count=rowCount)
 
 
 def _uniqueLabels(labels: list[str], flags: object) -> list[str]:

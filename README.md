@@ -519,22 +519,52 @@ flowchart TD
     A["Pass 1: normalize the whole column"] --> B["Record the decimal precision of every well-formed value"]
     B --> C["Pass 2: retry only the failures"]
     C --> D{"Is there precision evidence?"}
-    D -->|no| E["Fatal error: separator cannot be restored"]
     D -->|yes| F["Reinsert the separator that many digits from the right"]
     F --> G{"Result inside the valid range?"}
-    G -->|no| E
-    G -->|yes| H["Use the repaired value, log a WARNING"]
+    G -->|no| E["Fatal error"]
+    G -->|yes| H["Repaired value, WARNING"]
+    D -->|no| I{"Plausible as a coordinate? At most 12 digits"}
+    I -->|no| E
+    I -->|yes| J["Guess: separator as far right as the range allows"]
+    J --> K["Guessed value, WARNING marked PLEASE VERIFY"]
 ```
+
+**Derived beats guessed.** A single intact value anywhere in the column is enough to
+replace the guess with a reconstruction. The guess only runs when *no* value in the whole
+column carries a separator — and then the column itself is flagged once, up front:
+
+```
+WARNING  stations.py:96   Column 'Longitude' contains no value with a decimal separator,
+                          so its precision is unknown. Separator positions will be
+                          guessed and must be verified.
+```
+
+### The guess is a guess
+
+Placing the separator as far right as the range allows is correct whenever the original
+integer part used the maximum number of digits the range permits. It is **wrong** otherwise,
+and latitude and longitude behave differently because their ranges differ:
+
+| Original | Without separator | Guessed | |
+| --- | --- | --- | --- |
+| `52.459373` (lat) | `52459373` | `52.459373` | ✅ latitude allows 2 integer digits |
+| `18.5737` (lat) | `185737` | `18.5737` | ✅ |
+| `13.361402` (lon) | `13361402` | `133.61402` | ❌ longitude allows 3 |
+| `9.993682` (lon) | `9993682` | `99.93682` | ❌ |
+
+So a run with **no** precision evidence at all needs its output checked — that is what the
+`PLEASE VERIFY` warning is for. In the normal case, where the separator was forgotten only
+in individual cells, the intact cells supply the precision and the result is exact.
 
 Guard rails, so the repair never invents data:
 
 | Situation | Behaviour |
 | --- | --- |
-| Value in range without a separator (`52`) | Left untouched — a legitimate coordinate |
+| Value in range without a separator (`52`, `65`) | Left untouched — a legitimate coordinate, and an undetectable loss |
 | Out of range **with** a separator (`152.5`) | Fatal — a genuine data error, never reinterpreted |
-| No intact value in the column | Fatal — the precision is unknown, so nothing is guessed |
-| Fewer digits than the precision (`524` at 6 decimals) | Fatal — would fabricate a near-zero value |
+| Fewer digits than the known precision (`524` at 6 decimals) | Fatal — would fabricate a near-zero value |
 | Still out of range after the repair | Fatal |
+| More than 12 digits | Fatal — corrupt data, not a missing separator |
 | Non-digit characters | Fatal |
 
 The dominant precision wins; on a tie the higher precision is used so no digit is lost.
@@ -586,6 +616,7 @@ business column and is never treated as a relevance column.
 | Empty `ELEMENT ID` | fatal | Without an MJAP-ID the record is unusable |
 | `SUB` without latitude or longitude | fatal | Applies to virtual stations too |
 | Coordinate out of range | fatal | Lat −90…90, long −180…180 |
+| Coordinate without a decimal separator | warning | Rebuilt from the column's precision, or guessed and marked `PLEASE VERIFY` |
 | Unparsable date | fatal | No broken date is ever passed through |
 | `LINE`/`TRA`/`TIE`/`DCL` missing a station | fatal | Both references are mandatory |
 | `CAP`/`BUB`/`GEN`/`IND`/`LOAD`/`PPL`/`PROD` missing a station | warning | Writes literal `NaN`, continues |
@@ -625,11 +656,11 @@ TennetD,Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 .venv/bin/python -m pytest
 ```
 
-**182 tests**, including all 25 cases required by the specification.
+**194 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |
-| `tests/testNormalize.py` | Voltage (6, 7), coordinates (5), forgotten separators, dates (9, 10), booleans (19–21) |
+| `tests/testNormalize.py` | Voltage (6, 7), coordinates (5), forgotten separators and the guess, dates (9, 10), booleans (19–21) |
 | `tests/testStations.py` | Real/virtual station (1, 2), missing coordinates (3, 4), voltage JSON (8), duplicates (22) |
 | `tests/testNetworkElements.py` | LINE/TRA/TIE/DCL (11–15), GEN → `NaN` (16), unknown reference (17), unknown type (18) |
 | `tests/testRelevance.py` | `relevant für` from 0/1 and True/False (19–21), ignored columns |
@@ -683,7 +714,7 @@ Where the specification left a gap, the choice was made explicit rather than sil
 | Station id without `_` | Warning, whole id used as the name | Better than guessing a voltage level |
 | Empty `VOLTAGE-LEVEL` on a station | `[]` | The honest JSON representation of "no voltages" |
 | Coordinate with both `.` and `,` | Last separator wins, warning | Deterministic and visible |
-| Coordinate without any separator | Repaired from the column's precision, warning | Forgotten separators are common; guessing the position is not |
+| Coordinate without any separator | Repaired from the column's precision; guessed as a last resort | Forgotten separators are common; a run that has to guess says so loudly |
 | Duplicate column names | Fatal | The mapping would be ambiguous |
 | Errors within a phase | All collected, then abort | One run shows every problem |
 | CSV quoting | Minimal by default | RFC 4180 round-trips exactly; `--quote-all` available |
