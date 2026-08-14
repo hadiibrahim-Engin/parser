@@ -1,24 +1,49 @@
-# Excel → Stationen.csv / Netzelemente.csv
+# Excel → `Stationen.csv` + `Netzelemente.csv`
 
-Konvertiert eine Excel-Netzinventarliste in **genau zwei** CSV-Dateien:
-`Stationen.csv` und `Netzelemente.csv`.
+A production-oriented converter that reads an Excel network inventory and produces
+**exactly two** CSV files: `Stationen.csv` (substations) and `Netzelemente.csv`
+(network elements).
 
-Die Output-Header sind ein externer Vertrag: Schreibweise, Reihenfolge, Bindestriche,
-Leerzeichen, Groß-/Kleinschreibung und Umlaute werden nicht verändert.
+The two output headers are an **immutable external contract**. Spelling, order,
+hyphens, spaces, capitalization and umlauts are never changed, never translated,
+never reordered. Everything in this converter is built around protecting that contract
+while refusing to invent data.
+
+Three rules drive every design decision:
+
+1. **Never invent a value.** A field without a defined source stays empty.
+2. **Never lose data silently.** Anything unexpected is either a warning or a fatal error.
+3. **Never write a partial result.** Either both files are complete and valid, or neither exists.
 
 ---
 
-## Installation
+## Table of contents
+
+- [Quick start](#quick-start)
+- [Command line reference](#command-line-reference)
+- [How it works](#how-it-works)
+- [Finding the header row](#finding-the-header-row)
+- [Classification](#classification)
+- [Error strategy](#error-strategy)
+- [Logging](#logging)
+- [Module map](#module-map)
+- [Field mapping](#field-mapping)
+- [Normalization rules](#normalization-rules)
+- [Validation rules](#validation-rules)
+- [Output format](#output-format)
+- [Testing](#testing)
+- [Performance](#performance)
+- [Design decisions](#design-decisions)
+- [Extending the converter](#extending-the-converter)
+
+---
+
+## Quick start
 
 ```bash
 python -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
-
-Python 3.11+. Pflichtabhängigkeiten: `pandas`, `openpyxl`, `colorlog`.
-`python-calamine` ist **optional** und beschleunigt nur das Einlesen (siehe [Performance](#performance)).
-
-## Verwendung
 
 ```bash
 python converter.py input.xlsx
@@ -28,219 +53,607 @@ python converter.py input.xlsx
 python converter.py input.xlsx --output-dir ./output
 ```
 
-| Option | Bedeutung |
+Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
+`python-calamine` is optional and only makes reading faster — see [Performance](#performance).
+
+---
+
+## Command line reference
+
+| Option | Meaning |
 | --- | --- |
-| `-o`, `--output-dir` | Zielverzeichnis (Default: aktuelles Verzeichnis) |
-| `--sheet` | Worksheet als Name oder 0-basierter Index (Default: erstes Worksheet) |
-| `--header-row` | 1-basierte Excel-Zeile der Kopfzeile (Default: automatische Erkennung) |
-| `--engine` | `auto` (Default), `openpyxl` oder `calamine` |
-| `--encoding` | CSV-Kodierung (Default `utf-8`; `utf-8-sig` für Excel-freundliche BOM) |
-| `--quote-all` | Jedes Feld quoten statt nur die notwendigen |
-| `--log-level` | `DEBUG`, `INFO` (Default), `WARNING`, `ERROR`, `CRITICAL` |
-| `--color` / `--no-color` | Farbige Logausgabe erzwingen bzw. abschalten |
+| `input` | Path to the input `.xlsx` file |
+| `-o`, `--output-dir` | Target directory for both CSV files (default: current directory) |
+| `--sheet` | Worksheet name or 0-based index (default: the first worksheet) |
+| `--header-row N` | 1-based Excel row holding the column headers (default: detected automatically) |
+| `--engine` | `auto` (default), `openpyxl` or `calamine` |
+| `--encoding` | Output encoding (default `utf-8`; use `utf-8-sig` for an Excel-friendly BOM) |
+| `--quote-all` | Quote every CSV field instead of only those that require it |
+| `--log-level` | Console minimum level: `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, `CRITICAL` |
+| `--debug-file PATH` | Also write a full `DEBUG`-level log to this file, independent of `--log-level` |
+| `--color` / `--no-color` | Force or disable colored log output |
 
-**Exit-Codes:** `0` Erfolg · `2` fataler Validierungsfehler · `1` unerwarteter Fehler.
+**Exit codes**
 
-Ohne `--sheet` wird das erste Worksheet verwendet und sein Name per `INFO` geloggt.
-
-## Ablauf
-
-```
-Excel roh lesen               (ohne Annahme über die Kopfzeile)
-  → Kopfzeile suchen          (Vorspann darüber verwerfen)
-  → Spalten normalisieren       (trimmen, kanonische Schreibweise)
-  → Inputschema validieren      (Pflichtspalten vorhanden?)
-  → ELEMENT-TYPE klassifizieren (unbekannter Typ = fatal, Abbruch)
-  → Stationen (SUB) erfassen
-  → Stationsindex über ELEMENT ID aufbauen
-  → Netzelemente erfassen
-  → ALLE Validierungen          (Referenzen, Dubletten, Output-Schema)
-  → erst jetzt: Stationen.csv + Netzelemente.csv schreiben
-```
-
-Es wird **nichts** geschrieben, solange nicht alle Validierungen fehlerfrei sind.
-Beide Dateien entstehen zunächst als temporäre Dateien und werden erst danach atomar
-an ihren Zielnamen verschoben – auch ein I/O-Fehler hinterlässt also keinen halben Output.
-
-## Kopfzeile finden
-
-Die Kopfzeile steht nicht zwingend in Zeile 1 – in der Praxis liegen Titel, Stand und
-Hinweise darüber. Ihre Position wird deshalb **automatisch ermittelt**, eine feste
-Zeilennummer ist nirgends im Code verdrahtet.
-
-Die Datei wird ohne Kopfzeilenannahme eingelesen. Anschließend wird jede der ersten
-100 Zeilen bewertet: gezählt wird, wie viele der 13 Pflichtspalten sie als Überschrift
-enthält (case-insensitiv, whitespace-tolerant). Die erste Zeile mit der höchsten
-Trefferzahl gewinnt; bei vollständiger Übereinstimmung bricht die Suche sofort ab.
-**Alles oberhalb dieser Zeile wird verworfen** – der Vorspann muss weder ein bestimmtes
-Format haben noch leer sein.
-
-```
-INFO     Header detected in row 5 - skipping 4 leading row(s) above it.
-INFO     Found 6 data row(s) below the header.
-```
-
-Alle Zeilennummern in Warnungen und Fehlermeldungen beziehen sich weiterhin auf die
-**echte Excel-Zeile**, nicht auf die Position innerhalb der Daten – bei Kopfzeile in
-Zeile 5 beginnt die erste Datenzeile also bei `Row: 6`.
-
-Sonderfälle:
-
-* Passt eine Zeile nur schwach (weniger als die Hälfte der Pflichtspalten), wird sie
-  trotzdem verwendet, aber mit einer `WARNING` versehen. Die anschließende Schemaprüfung
-  nennt dann exakt die fehlende Spalte – hilfreicher als ein pauschales „nicht gefunden".
-* Enthält keine der abgesuchten Zeilen auch nur eine Pflichtspalte, bricht die Conversion
-  mit einem klaren Hinweis auf `--header-row` ab.
-* Ein Vorspanntext, in dem einzelne Spaltennamen vorkommen, verdrängt die echte
-  Kopfzeile nicht – diese trifft immer mehr Spalten.
-* Leere Zellen in der Kopfzeile erhalten den Platzhalternamen `Unnamed: <Position>`.
-* Mit `--header-row 5` lässt sich die Erkennung jederzeit übersteuern.
-
-Die Erkennung kostet nichts Messbares (0,3 ms bei 200.000 Zeilen), da nur die ersten
-Zeilen betrachtet werden und ein vollständiger Treffer die Suche beendet.
-
-## Module
-
-| Datei | Verantwortung |
+| Code | Meaning |
 | --- | --- |
-| `converter.py` | CLI-Einstiegspunkt |
-| `excelToCsv/cli.py` | Argumente, Exit-Codes |
-| `excelToCsv/schema.py` | Unveränderlicher Vertrag: Input-Pflichtspalten, ELEMENT-TYPEs, Output-Header |
-| `excelToCsv/reader.py` | Excel-I/O, Kopfzeilenerkennung, Spaltennormalisierung, Schemaprüfung |
-| `excelToCsv/normalize.py` | Reine Wertfunktionen (Datum, Spannung, Koordinate, Boolean, Text) |
-| `excelToCsv/relevance.py` | Dynamische `Interesting/Relevant for`-Spalten → JSON-Liste |
-| `excelToCsv/stations.py` | `SUB` → Stationen-Datensatz |
-| `excelToCsv/networkElements.py` | alle übrigen Typen → Netzelemente-Datensatz |
-| `excelToCsv/validate.py` | Typprüfung, Dubletten, Referenzintegrität, Output-Schema |
-| `excelToCsv/writer.py` | Atomares CSV-Schreiben |
-| `excelToCsv/pipeline.py` | Orchestrierung (`convertTable` ist I/O-frei und direkt testbar) |
-| `excelToCsv/issues.py` | Einsammeln/Formatieren von Fehlern und Warnungen |
-| `excelToCsv/loggingSetup.py` | Farbiges Logging (`colorlog`, ANSI-Fallback) |
+| `0` | Success — both CSV files were written |
+| `2` | Fatal validation or I/O error — **no** CSV file was written |
+| `1` | Unexpected error (bug); a full traceback is logged |
 
-Transformation und I/O sind getrennt: `pipeline.convertTable(table, logger)` arbeitet rein
-auf Daten und lässt sich ohne Excel-Datei testen.
+---
 
-## Fehlerstrategie
+## How it works
 
-* `INFO` – normaler Programmablauf.
-* `WARNING` – fachlich tolerierbar, Conversion läuft weiter.
-* `ERROR` – **immer fatal**, Conversion bricht ab, es entstehen keine CSV-Dateien.
+The pipeline is strictly ordered: **everything is validated before anything is written.**
+Stations are always collected before network elements, so a network element may reference
+a station that appears *later* in the spreadsheet.
 
-Jede Meldung enthält so viel Kontext wie möglich:
+```mermaid
+flowchart TD
+    A["Read worksheet raw, no header assumption"] --> B["Locate header row, discard everything above"]
+    B --> C["Normalize column names: trim, canonical spelling"]
+    C --> D{"All required columns present?"}
+    D -->|no| X["Abort: missing input column"]
+    D -->|yes| E["Drop completely empty rows"]
+    E --> F["Normalize ELEMENT-TYPE to uppercase"]
+    F --> G{"All types known?"}
+    G -->|no| X2["Abort: unknown ELEMENT-TYPE"]
+    G -->|yes| H["Split rows: SUB vs. everything else"]
+    H --> I["Build station records: coordinates, dates, voltages"]
+    I --> J["Build station index: ELEMENT ID to row"]
+    J --> K["Build network element records: references, dates"]
+    K --> L["Validate references, duplicates, output schema"]
+    L --> M{"Any fatal error?"}
+    M -->|yes| X3["Abort: nothing is written"]
+    M -->|no| N["Write Stationen.csv and Netzelemente.csv"]
+    N --> O["Exit code 0"]
+    X --> Y["Exit code 2"]
+    X2 --> Y
+    X3 --> Y
+```
+
+Why this order matters:
+
+* **Header first** — row numbers in every later message refer to the real Excel row.
+* **Types before splitting** — an unknown `ELEMENT-TYPE` makes the rest meaningless,
+  so it aborts immediately rather than producing half-classified output.
+* **Stations before elements** — the station index must exist before references are
+  checked, which makes the result independent of row order in the spreadsheet.
+* **Writing last** — the single most important guarantee of the whole tool.
+
+---
+
+## Finding the header row
+
+The header is not necessarily in row 1. Real exports carry a title, an export date and
+notes above it. The header position is therefore **detected automatically**; no row
+number is hard-coded anywhere.
 
 ```
-ERROR    Validation failed.
-Row: 184
-ELEMENT ID: LINE_471
-ELEMENT-TYPE: LINE
-Field: Station 2
-Value: <empty>
-Problem: Required station reference is missing.
-Expected: LINE requires Station 1 and Station 2.
+ 1 │ Network inventory export
+ 2 │ As of: 14.08.2026            Owner: grid planning
+ 3 │
+ 4 │ Note: do not write above the header row
+ 5 │ TSO │ ELEMENT ID │ LONG-NAME │ … ← header detected here
+ 6 │ 50Hertz │ HRA_380 │ UW Hranice │ …   ← first data row = Excel row 6
 ```
 
-**Bewusste Abweichung von der Vorgabe:** Innerhalb einer Phase werden *alle* Fehler
-eingesammelt und geloggt, und erst an der Phasengrenze wird abgebrochen. Der Anwender
-sieht damit in einem Lauf jedes Problem statt nur des ersten. Die harte Zusage bleibt
-unverändert: bei mindestens einem `ERROR` entsteht keine einzige CSV-Datei.
+### Detection algorithm
 
-## Fachliche Regeln
+```mermaid
+flowchart TD
+    A["Read sheet without a header"] --> B["Score each of the first 100 rows: how many of the 13 required column names appear"]
+    B --> C{"Perfect match, 13 of 13?"}
+    C -->|yes| D["Stop early, take this row"]
+    C -->|no| E["Keep the first row with the highest score"]
+    D --> F{"Best score"}
+    E --> F
+    F -->|zero matches| G["Abort: header not found, hint at --header-row"]
+    F -->|below half| H["WARNING: weak header, continue anyway"]
+    F -->|half or more| I["Accept silently"]
+    H --> J["Schema check names the exact missing column"]
+    I --> K["Discard all rows above, use this row as the header"]
+    J --> K
+```
 
-**Klassifikation.** `SUB` → `Stationen.csv`. `CAP BUB DCL GEN IND LINE LOAD PPL PROD TIE TRA`
-→ `Netzelemente.csv`. Prüfung case-insensitiv, intern immer Uppercase.
-Unbekannter `ELEMENT-TYPE` = fatal.
+Matching is case-insensitive and whitespace-tolerant, so `  element id ` matches
+`ELEMENT ID`.
 
-**Virtuelle Stationen.** Stationsname = Teil vor dem *letzten* `_`. Beginnt er mit `X`,
-gilt die Station als virtueller X-Knoten (`reales UW = Falsch`), sonst `Wahr`.
-Virtuelle Stationen stehen bereits als eigene `SUB`-Zeilen im Input – es werden keine
-erzeugt und keine Koordinaten berechnet.
+```
+INFO     reader.py:208   Header detected in row 5 - skipping 4 leading row(s) above it.
+INFO     reader.py:361   Found 6 data row(s) below the header.
+```
 
-**Koordinaten.** Für jede `SUB`-Station (real wie virtuell) sind `Latitude` und `Longitude`
-Pflicht. `52,459373` wird zu `52.459373`. Bereichsprüfung: Lat −90…90, Long −180…180.
-Fehlend oder ungültig = fatal.
+### Why a weak match is accepted rather than rejected
 
-**Datum.** `STARTLIFETIME → IBN`, `ENDLIFETIME → ABN`, Zielformat immer `TT.MM.JJJJ`.
-Echte Excel-Datumswerte, Seriennummern und parsebare Strings werden unterstützt
-(ISO zuerst, danach tagesorientierte Formate – es wird nie geraten).
-Leer bleibt leer, nicht interpretierbar = fatal.
+If a row matches only 2 of 13 required columns, reporting *"header not found"* is far less
+useful than reporting *"missing required input column: LONG-NAME"*. So a weak candidate is
+accepted with a `WARNING`, and the schema check produces the precise, actionable list.
+Only a sheet where **no** row contains **any** required column name is rejected outright.
 
-**Spannung.** `380.0 → 380`, `380.0/110.0 → 380/110`, `DC → DC` (Text, nie numerisch).
-In `Stationen.csv` als JSON-Liste (`["380","110"]`), in `Netzelemente.csv` als Text (`380/110`).
+### Edge cases
 
-**relevant für.** Spalten mit `Interesting` bzw. `Relevant for` im Header werden dynamisch
-erkannt, der Name aus dem Header extrahiert (bevorzugt aus der Klammer). `TRUE`: `1`, `True`,
-`true`, `TRUE`. `FALSE`: `0`, `False`, `false`, `FALSE`, leer, `NaN`. Alles andere → `WARNING`,
-und der Eintrag gilt **nicht** als `TRUE`. Ergebnis ist eine echte JSON-Liste: `["50Hertz","TennetD"]`.
-`OPC INTERESTING ASSET` ist ausdrücklich keine Relevanz-Spalte.
-
-**Stationsreferenzen.** `LINE TRA TIE DCL` benötigen `Station 1` **und** `Station 2` – fehlt eine,
-ist das fatal. Bei `CAP BUB GEN IND LOAD PPL PROD` wird stattdessen das Literal `NaN`
-geschrieben und eine `WARNING` geloggt. Jede *gesetzte* Referenz muss auf eine existierende
-`SUB`-Zeile zeigen, sonst fatal – unabhängig von der Zeilenreihenfolge im Excel.
-
-**Dubletten.** Doppelte Stations-`ELEMENT ID` = fatal, unter Nennung aller betroffenen Zeilen.
-Doppelte Netzelement-IDs sind nur dann fatal, wenn sich die Datensätze unterscheiden;
-vollständig identische Zeilen ergeben eine `WARNING`.
-
-**Ignoriert.** `CCR/ROA`, `ACTION`, `Map Multipod`, `Multipod`, `OPC INTERESTING ASSET`,
-`OPC Map only`, `interconnector …`. Keine Multipod-, keine OPC-Logik.
-
-**Felder ohne Quelle** (`Region`, `ID-GUID intern-1/2`, `ID-OPC`, `…OPC-Name`, `IBN/ABN - Mehrfach`,
-`Station T-1/T-2`, `Y-Knoten-1/2`, `ID` bei Netzelementen) bleiben leer. Es werden keine GUIDs,
-Koordinaten oder fachlichen Werte erfunden.
-
-### Zusätzliche Regeln, die die Vorgabe offen ließ
-
-| Situation | Verhalten |
+| Situation | Behaviour |
 | --- | --- |
-| Kopfzeile nicht in Zeile 1 | automatisch gesucht, Vorspann verworfen (siehe [Kopfzeile finden](#kopfzeile-finden)) |
-| `ELEMENT ID` leer | fatal – ohne MJAP-ID ist der Datensatz nicht verwendbar |
-| Komplett leere Excel-Zeile | wird übersprungen und per `INFO` gemeldet |
-| Station ohne `_` in der ID | `WARNING`, die volle ID gilt als Stationsname |
-| Leere `VOLTAGE-LEVEL` bei `SUB` | `[]` (leere JSON-Liste) |
-| Koordinate mit Punkt *und* Komma | letzter Separator gilt als Dezimaltrenner, `WARNING` |
-| Doppelte Spaltennamen nach Normalisierung | fatal (Zuordnung wäre mehrdeutig) |
+| Header in row 1 | Detected normally, no rows skipped |
+| Preamble text mentioning a few column names | Cannot outrank the real header, which matches far more |
+| Empty cells inside the header row | Named `Unnamed: <position>` |
+| Duplicate column names after normalization | Fatal — the mapping would be ambiguous |
+| Header further down than row 100 | Use `--header-row N` |
+| Detection wrong for any reason | `--header-row N` overrides it completely |
 
-## Output
+**Row numbers always refer to the real Excel row.** With the header in row 5, the first
+data row is reported as `Row: 6`. This is verified for preamble lengths of 0, 1, 4, 9 and 25.
 
-UTF-8, Komma als Separator, keine Indexspalte, keine Zusatzspalten, LF als Zeilenende.
-Felder werden RFC-4180-konform gequotet – eine JSON-Liste erscheint in der Datei
-als `"[""380"",""110""]"` und wird von jedem CSV-Reader wieder als `["380","110"]` gelesen.
-Mit `--quote-all` wird stattdessen jedes Feld gequotet.
+---
 
-## Tests
+## Classification
+
+`ELEMENT-TYPE` decides which file a row ends up in. The check is case-insensitive;
+internally the value is always uppercase.
+
+```mermaid
+flowchart LR
+    A["Input row"] --> B{"ELEMENT-TYPE"}
+    B -->|SUB| C["Stationen.csv, 20 columns"]
+    B -->|LINE TRA TIE DCL| D["Netzelemente.csv, both stations mandatory"]
+    B -->|CAP BUB GEN IND LOAD PPL PROD| E["Netzelemente.csv, missing station allowed"]
+    B -->|anything else| F["Fatal error, conversion aborted"]
+```
+
+### Real vs. virtual substations
+
+A station whose name (the part **before the last** `_`) starts with `X` is a virtual
+X node.
+
+| `ELEMENT ID` | Station name | `reales UW` |
+| --- | --- | --- |
+| `Berlin_380` | `Berlin` | `Wahr` |
+| `HRA_380` | `HRA` | `Wahr` |
+| `Xb_380` | `Xb` | `Falsch` |
+| `Xfoo_220` | `Xfoo` | `Falsch` |
+| `Station_A_110` | `Station_A` | `Wahr` |
+
+Virtual stations already exist as their own `SUB` rows in the input. **None are created,
+and no coordinates are ever computed.** Both real and virtual stations require valid
+coordinates.
+
+---
+
+## Error strategy
+
+```mermaid
+flowchart TD
+    A["Finding during conversion"] --> B{"Tolerable?"}
+    B -->|yes| C["WARNING, logged with full context"]
+    C --> D["Conversion continues"]
+    B -->|no| E["ERROR, collected but not raised yet"]
+    E --> F["Keep checking the rest of the phase"]
+    F --> G{"End of phase: any error?"}
+    D --> G
+    G -->|no| H["Next phase"]
+    G -->|yes| I["CRITICAL summary"]
+    I --> J["ConversionError, no CSV file exists"]
+```
+
+| Level | Meaning |
+| --- | --- |
+| `DEBUG` | Internal detail (column renames, schema checks, virtual node detection) |
+| `INFO` | Normal progress — file, sheet, header row, counts, results |
+| `WARNING` | Tolerable finding; the conversion continues with a documented fallback |
+| `ERROR` | **Always fatal.** The conversion will abort at the end of the phase |
+| `CRITICAL` | The abort itself, with the error count and the phase that failed |
+
+Every finding carries as much context as available:
+
+```
+ERROR    networkElements.py:69  Validation failed.
+         Row: 184
+         ELEMENT ID: LINE_471
+         ELEMENT-TYPE: LINE
+         Field: Station 2
+         Value: <empty>
+         Problem: Required station reference is missing.
+         Expected: LINE requires Station 1 and Station 2.
+```
+
+### One deliberate deviation from the specification
+
+The specification says to abort on the first fatal error. This implementation collects
+**all** errors within a phase, logs each one in full, and aborts at the phase boundary.
+You therefore see every problem in a single run instead of fixing them one at a time.
+
+The hard guarantee is unchanged: **if a single `ERROR` occurred, not one CSV file is
+written.** Both files are first written to temporary files in the target directory and
+only then moved atomically into place, so even an I/O failure cannot leave a half-written
+output behind.
+
+---
+
+## Logging
+
+All output goes through `logging` — the converter contains no `print()` statements.
+
+Every line shows the level, **the source file and line that produced it**, and the message.
+Multi-line findings are indented and separated by a blank line so blocks never run together:
+
+```
+INFO     reader.py:119          Using worksheet: Netzdaten
+INFO     reader.py:208          Header detected in row 5 - skipping 4 leading row(s) above it.
+INFO     stations.py:92         Found 3 station(s).
+
+WARNING  relevance.py:128       Tolerable issue.
+         Row: 8
+         ELEMENT ID: Xb_380
+         ELEMENT-TYPE: SUB
+         Field: Interesting/Relevant for (TennetD)
+         Value: maybe
+         Problem: Unrecognized boolean value - not interpreted as TRUE.
+         Action: Treating the entry as not relevant and continuing.
+
+INFO     networkElements.py:92  Found 3 network element(s).
+```
+
+The source location points at the **domain module that found the problem**
+(`stations.py`, `networkElements.py`, `validate.py`, `relevance.py`), not at the shared
+error collector — `IssueCollector` logs with `stacklevel=2` so the caller's frame is
+recorded. This is covered by tests.
+
+Colors: `DEBUG` dim, `INFO` green, `WARNING` yellow, `ERROR` red, `CRITICAL` white on red.
+Colors come from `colorlog` when installed, with a built-in ANSI table as fallback, and are
+disabled automatically when stderr is not a TTY or `NO_COLOR` is set.
+
+### Capturing a full debug log
+
+`--log-level` controls what the console shows. Independently, `--debug-file PATH` writes
+**everything**, including `DEBUG` detail, to a plain-text file — useful for sharing a full
+trace of a run without flooding the console:
+
+```bash
+python converter.py input.xlsx --log-level WARNING --debug-file run.log
+```
+
+The console stays quiet (only warnings and errors), while `run.log` receives every message
+at every level, with no ANSI color codes, so it can be opened, grepped or attached to a bug
+report directly. The file is overwritten on each run, not appended to.
+
+---
+
+## Module map
+
+```mermaid
+flowchart TD
+    subgraph ENTRY["Entry point"]
+        CONV["converter.py"]
+        CLI["cli.py: arguments, exit codes"]
+    end
+    subgraph ORCH["Orchestration"]
+        PIPE["pipeline.py: convertTable is I/O-free"]
+    end
+    subgraph FILEIO["I/O"]
+        READ["reader.py: header detection, schema"]
+        WRITE["writer.py: atomic CSV write"]
+    end
+    subgraph TRANSFORM["Transformation"]
+        STA["stations.py"]
+        NET["networkElements.py"]
+        REL["relevance.py"]
+    end
+    subgraph CHECKS["Validation"]
+        VAL["validate.py"]
+    end
+    subgraph BASE["Foundation"]
+        NORM["normalize.py: pure value functions"]
+        SCHEMA["schema.py: frozen contract"]
+        ISSUES["issues.py: findings"]
+        LOG["loggingSetup.py"]
+        ERR["errors.py"]
+        CTX["context.py"]
+    end
+
+    CONV --> CLI --> PIPE
+    CLI --> LOG
+    PIPE --> READ
+    PIPE --> STA
+    PIPE --> NET
+    PIPE --> VAL
+    PIPE --> WRITE
+    STA --> NORM
+    NET --> NORM
+    STA --> REL
+    NET --> REL
+    VAL --> NORM
+    READ --> NORM
+    STA --> SCHEMA
+    NET --> SCHEMA
+    VAL --> SCHEMA
+    READ --> SCHEMA
+    WRITE --> SCHEMA
+    STA --> CTX
+    NET --> CTX
+    VAL --> ISSUES
+    REL --> ISSUES
+    ISSUES --> ERR
+```
+
+| File | Responsibility |
+| --- | --- |
+| `converter.py` | CLI entry point (`python converter.py input.xlsx`) |
+| `excelToCsv/cli.py` | Argument parsing, exit codes |
+| `excelToCsv/schema.py` | Frozen contract: required input columns, valid types, exact output headers |
+| `excelToCsv/reader.py` | Excel I/O, header detection, column normalization, schema check |
+| `excelToCsv/normalize.py` | Pure value functions: date, voltage, coordinate, boolean, text, station id |
+| `excelToCsv/relevance.py` | Dynamic `Interesting/Relevant for` columns → JSON list |
+| `excelToCsv/stations.py` | `SUB` rows → station records |
+| `excelToCsv/networkElements.py` | All other valid types → network element records |
+| `excelToCsv/validate.py` | Element types, duplicates, reference integrity, output schema |
+| `excelToCsv/writer.py` | Atomic CSV writing |
+| `excelToCsv/pipeline.py` | Orchestration; `convertTable()` is I/O-free and directly testable |
+| `excelToCsv/issues.py` | Collecting and formatting findings |
+| `excelToCsv/context.py` | Shared row/context data structures |
+| `excelToCsv/loggingSetup.py` | Colored block logging |
+| `excelToCsv/errors.py` | `ConversionError`, `NormalizationError` |
+
+Transformation and I/O are separated on purpose: `pipeline.convertTable(table, logger)`
+works purely on data and can be tested without an Excel file at all.
+
+---
+
+## Field mapping
+
+### `Stationen.csv` — 20 columns
+
+| # | Output column | Source | Transformation |
+| --- | --- | --- | --- |
+| 1 | `Eigentümer` | `TSO` | trimmed text |
+| 2 | `MJAP-ID` | `ELEMENT ID` | **unchanged** |
+| 3 | `Stationsname - Langname` | `LONG-NAME` | trimmed text |
+| 4 | `lat` | `Latitude` | normalized decimal, range checked |
+| 5 | `long` | `Longitude` | normalized decimal, range checked |
+| 6 | `Spannung` | `VOLTAGE-LEVEL` | JSON list, e.g. `["380","110"]` |
+| 7 | `IBN` | `STARTLIFETIME` | `DD.MM.YYYY` |
+| 8 | `ABN` | `ENDLIFETIME` | `DD.MM.YYYY` |
+| 9 | `Stationsname - Kurzname` | `LONG-NAME` | same as long name for now |
+| 10 | `reales UW` | derived from `ELEMENT ID` | `Wahr` / `Falsch` |
+| 11 | `Stationsname - OPC-Name` | — | empty |
+| 12 | `ID-GUID intern-1` | — | empty |
+| 13 | `ID-GUID intern-2` | — | empty |
+| 14 | `ID-OPC` | — | empty |
+| 15 | `ID-UCTE` | `UCTE CODE` | trimmed text |
+| 16 | `relevant für` | relevance columns | JSON list |
+| 17 | `ID` | `UCTE CODE` | identical to `ID-UCTE` |
+| 18 | `Kommentar` | `DESCRIPTION` | trimmed text |
+| 19 | `IBN - Mehrfach` | — | empty |
+| 20 | `ABN - Mehrfach` | — | empty |
+
+### `Netzelemente.csv` — 30 columns
+
+| # | Output column | Source | Transformation |
+| --- | --- | --- | --- |
+| 1 | `Eigentümer` | `TSO` | trimmed text |
+| 2 | `MJAP-ID` | `ELEMENT ID` | the element's own id, not a station id |
+| 3 | `Stromkreisname - Langname` | `LONG-NAME` | trimmed text |
+| 4 | `Region` | — | empty (`CCR/ROA` is explicitly **not** used) |
+| 5 | `Element Typ` | `ELEMENT-TYPE` | uppercase |
+| 6 | `Spannung` | `VOLTAGE-LEVEL` | normalized **text**, e.g. `380/110`, `DC` |
+| 7 | `relevant für` | relevance columns | JSON list |
+| 8 | `IBN` | `STARTLIFETIME` | `DD.MM.YYYY` |
+| 9 | `ABN` | `ENDLIFETIME` | `DD.MM.YYYY` |
+| 10 | `IBN - Mehrfach` | — | empty |
+| 11 | `ABN - Mehrfach` | — | empty |
+| 12 | `Station Anfang` | `Station 1` | value, or literal `NaN` when optional and missing |
+| 13 | `Station Ende` | `Station 2` | value, or literal `NaN` when optional and missing |
+| 14–17 | `Station T-1`, `Station T-2`, `Y-Knoten-1`, `Y-Knoten-2` | — | empty |
+| 18 | `Stromkreisname - Kurzname` | `LONG-NAME` | same as long name for now |
+| 19 | `Stromkreisname - OPC-Name` | — | empty |
+| 20 | `ID-GUID intern-1` | — | empty |
+| 21 | `ID-GUID intern-2` | — | empty |
+| 22 | `ID-OPC` | — | empty |
+| 23 | `ID-UCTE` | `UCTE CODE` | trimmed text |
+| 24 | `ID` | — | empty (no defined source) |
+| 25 | `Station Anfang:MJAP-ID` | `Station 1` | same value as `Station Anfang` |
+| 26 | `Station Ende:MJAP-ID` | `Station 2` | same value as `Station Ende` |
+| 27–30 | `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID`, `Y-Knoten-1: MJAP-ID`, `Y-Knoten-2: MJAP-ID` | — | empty |
+
+### Ignored input columns
+
+`CCR/ROA`, `ACTION`, `Map Multipod`, `Multipod`, `OPC INTERESTING ASSET`, `OPC Map only`,
+`interconnector …`. They may be present or absent and never influence the result.
+**No multipod logic and no OPC logic is implemented.**
+
+---
+
+## Normalization rules
+
+### Voltage
+
+Target is always **text**, never a number, so non-numeric business values survive.
+
+| Input | Station output | Element output |
+| --- | --- | --- |
+| `380.0` | `["380"]` | `380` |
+| `110.0` | `["110"]` | `110` |
+| `380.0/110.0` | `["380","110"]` | `380/110` |
+| `DC` | `["DC"]` | `DC` |
+| `0.4` | `["0.4"]` | `0.4` |
+| empty | `[]` | empty |
+
+### Coordinates
+
+Accepts `52.459373`, `"52,459373"` and native Excel numbers; always written with a dot.
+Validated against latitude −90…90 and longitude −180…180. Required for **every** `SUB`
+row, real or virtual. Missing, non-numeric or out-of-range values are fatal.
+
+If a value contains both `.` and `,` the **last** separator is treated as the decimal
+separator and a `WARNING` is logged.
+
+### Dates
+
+`STARTLIFETIME → IBN`, `ENDLIFETIME → ABN`, always `DD.MM.YYYY`.
+
+| Input | Output |
+| --- | --- |
+| `2025-05-09` | `09.05.2025` |
+| `09/05/2025` | `09.05.2025` |
+| `2025-05-09 00:00:00` | `09.05.2025` |
+| Excel date cell | `09.05.2025` |
+| Excel serial `45786` | `09.05.2025` |
+| empty | empty |
+| `irgendwann` | **fatal error** |
+
+Formats are tried from an explicit, ordered list — ISO first, then day-first. There is no
+`dayfirst` guessing, so the result is deterministic. A non-empty value that cannot be
+parsed is never passed through unchanged.
+
+### `relevant für`
+
+Columns whose header contains `Interesting` or `Relevant for` are detected dynamically and
+the organisation name is extracted from the header — preferably from the parentheses.
+
+| `50Hertz` | `Amprion` | `TennetD` | Result |
+| --- | --- | --- | --- |
+| `1` | `0` | `True` | `["50Hertz","TennetD"]` |
+| `TRUE` | empty | `false` | `["50Hertz"]` |
+| `0` | `0` | `0` | `[]` |
+| `maybe` | `1` | `0` | `["Amprion"]` + `WARNING` |
+
+`TRUE`: `1`, `True`, `true`, `TRUE`. `FALSE`: `0`, `False`, `false`, `FALSE`, empty, `NaN`.
+Anything else produces a warning and is **not** treated as true — the converter never guesses.
+
+`OPC INTERESTING ASSET` contains the word "interesting" but is an explicitly ignored
+business column and is never treated as a relevance column.
+
+---
+
+## Validation rules
+
+| Check | Level | Detail |
+| --- | --- | --- |
+| Missing required input column | fatal | Each missing column is named individually |
+| Unknown `ELEMENT-TYPE` | fatal | Aborts before any record is built |
+| Empty `ELEMENT ID` | fatal | Without an MJAP-ID the record is unusable |
+| `SUB` without latitude or longitude | fatal | Applies to virtual stations too |
+| Coordinate out of range | fatal | Lat −90…90, long −180…180 |
+| Unparsable date | fatal | No broken date is ever passed through |
+| `LINE`/`TRA`/`TIE`/`DCL` missing a station | fatal | Both references are mandatory |
+| `CAP`/`BUB`/`GEN`/`IND`/`LOAD`/`PPL`/`PROD` missing a station | warning | Writes literal `NaN`, continues |
+| Station reference not found in any `SUB` row | fatal | No broken references reach the CSV |
+| Duplicate station `ELEMENT ID` | fatal | All affected rows are listed |
+| Duplicate element id, identical records | warning | Both rows are kept |
+| Duplicate element id, conflicting records | fatal | All affected rows are listed |
+| Unrecognized boolean in a relevance column | warning | Not counted as true |
+| Output column set or order mismatch | fatal | Guards the external contract |
+| Any remaining NA value in the output | fatal | Prevents stray `nan` strings |
+
+---
+
+## Output format
+
+* UTF-8, comma separated, LF line endings, no index column, no extra columns
+* Headers exactly as specified, in exactly the specified order
+* Umlauts preserved
+* Fields are quoted per RFC 4180 — a JSON list appears in the file as
+  `"[""380"",""110""]"` and any CSV reader returns `["380","110"]` from it
+* `--quote-all` quotes every field instead
+* Written atomically: temporary file first, then moved into place
+
+Example (abridged):
+
+```csv
+Eigentümer,MJAP-ID,Stationsname - Langname,lat,long,Spannung,IBN,ABN,...
+50Hertz,HRA_380,UW Hranice,52.459373,13.361402,"[""380""]",17.03.2001,,...
+TennetD,Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
+```
+
+---
+
+## Testing
 
 ```bash
 .venv/bin/python -m pytest
 ```
 
-141 Tests, u. a. alle 25 geforderten Fälle:
+**151 tests**, including all 25 cases required by the specification.
 
-| Datei | Abgedeckt |
+| File | Covers |
 | --- | --- |
-| `tests/testHeaderDetection.py` | Kopfzeile in Zeile 5, echte Zeilennummern, `--header-row`, fehlende Kopfzeile |
-| `tests/testNormalize.py` | Spannung (6, 7), Koordinaten (5), Datum (9, 10), Boolean (19–21) |
-| `tests/testStations.py` | reale/virtuelle Station (1, 2), fehlende Koordinaten (3, 4), Spannungs-JSON (8), Dubletten (22) |
-| `tests/testNetworkElements.py` | LINE/TRA/TIE/DCL (11–15), GEN → `NaN` (16), unbekannte Referenz (17), unbekannter Typ (18) |
-| `tests/testRelevance.py` | `relevant für` (19–21) |
-| `tests/testOutput.py` | Header-Reihenfolge (23, 24), keine CSVs bei fatalem Fehler (25), CLI, Engines |
+| `tests/testNormalize.py` | Voltage (6, 7), coordinates (5), dates (9, 10), booleans (19–21) |
+| `tests/testStations.py` | Real/virtual station (1, 2), missing coordinates (3, 4), voltage JSON (8), duplicates (22) |
+| `tests/testNetworkElements.py` | LINE/TRA/TIE/DCL (11–15), GEN → `NaN` (16), unknown reference (17), unknown type (18) |
+| `tests/testRelevance.py` | `relevant für` from 0/1 and True/False (19–21), ignored columns |
+| `tests/testOutput.py` | Exact header order (23, 24), no CSVs on fatal error (25), CLI, engine equality |
+| `tests/testHeaderDetection.py` | Header in row 5, real Excel row numbers, `--header-row`, missing header |
+| `tests/testLogging.py` | Block indentation, blank-line separation, source location |
+
+The header order tests parse the header line **from the specification text** and compare it
+against `schema.py`, so a typo in either side fails the build.
+
+---
 
 ## Performance
 
-Messung auf 200.000 Zeilen (100k Stationen + 100k Netzelemente):
+Measured on 200,000 rows (100k stations + 100k network elements) on the development machine:
 
 | Phase | openpyxl | calamine |
 | --- | --- | --- |
-| Lesen | 18,9 s | 3,4 s |
-| Transformation + Validierung | 7,4 s | 7,4 s |
-| Schreiben | 0,8 s | 0,8 s |
-| **Gesamt** | **27,9 s** | **11,9 s** |
+| Read | 19.3 s | 3.2 s |
+| Header detection | 0.0002 s | 0.0003 s |
+| Transformation + validation | 7.6 s | 7.5 s |
+| Write | 0.8 s | 0.8 s |
+| **Total wall clock (CLI)** | **28.6 s** | **12.1 s** |
 
-Das Einlesen dominiert, deshalb ist `python-calamine` als optionaler Beschleuniger
-eingebunden: `--engine auto` (Default) nutzt es, wenn es installiert ist, und fällt sonst
-auf `openpyxl` zurück. Beide Engines liefern nachweislich byte-identische CSVs
+Reading dominates, so `python-calamine` is wired in as an **optional** accelerator:
+`--engine auto` (the default) uses it when installed and falls back to `openpyxl`
+otherwise. Both engines are verified to produce **byte-identical** CSV output
 (`testBothReadEnginesProduceIdenticalOutput`).
 
-Im Transformationspfad wird spaltenweise über NumPy-Objekt-Arrays gearbeitet statt
-zeilenweise über `DataFrame.iterrows()`. Die `relevant für`-Spalte wird über eine Bitmaske
-je Zeile berechnet, sodass jede vorkommende Kombination nur einmal als JSON serialisiert wird.
+Implementation choices that keep the transformation fast:
+
+* Column-wise work over NumPy object arrays instead of `DataFrame.iterrows()`.
+* `relevant für` is computed by packing each row's flags into a bitmask, so every distinct
+  combination is serialized to JSON exactly once instead of once per row.
+* Header detection short-circuits on a perfect match and never scans more than 100 rows.
+* Normalizers raise on bad values and the caller collects them; on Python 3.11+ a
+  non-raising `try` block is free, so the happy path costs nothing.
+
+---
+
+## Design decisions
+
+Where the specification left a gap, the choice was made explicit rather than silent:
+
+| Situation | Decision | Reason |
+| --- | --- | --- |
+| Header not in row 1 | Detect automatically, discard the preamble | Real exports carry titles and metadata |
+| Weak header match | Accept with a warning | The schema check gives a far more actionable message |
+| Empty `ELEMENT ID` | Fatal | Without an MJAP-ID the record cannot be used or referenced |
+| Completely empty Excel row | Skipped, reported at `INFO` | Trailing empty rows are normal; skipping is not silent |
+| Station id without `_` | Warning, whole id used as the name | Better than guessing a voltage level |
+| Empty `VOLTAGE-LEVEL` on a station | `[]` | The honest JSON representation of "no voltages" |
+| Coordinate with both `.` and `,` | Last separator wins, warning | Deterministic and visible |
+| Duplicate column names | Fatal | The mapping would be ambiguous |
+| Errors within a phase | All collected, then abort | One run shows every problem |
+| CSV quoting | Minimal by default | RFC 4180 round-trips exactly; `--quote-all` available |
+
+Identifiers use **camelCase** (`loadExcel`, `normalizeVoltage`) to match this project's
+convention rather than the snake_case names sketched in the specification. Classes stay
+`PascalCase` and module constants stay `UPPER_SNAKE_CASE`. `pytest` is configured with
+`python_files = ["test*.py"]` so camelCase test modules are collected.
+
+---
+
+## Extending the converter
+
+| Task | Where |
+| --- | --- |
+| Add or change an output column | `schema.py` only — then update the mapping in `stations.py` / `networkElements.py` |
+| Support a new `ELEMENT-TYPE` | Add it to `BOTH_STATIONS_REQUIRED` or `STATIONS_OPTIONAL` in `schema.py` |
+| Accept another date format | Append to `_DATE_FORMATS` in `normalize.py` |
+| Change a business rule | The relevant `stations.py` / `networkElements.py` / `validate.py` function |
+| Add a validation | A new function in `validate.py`, called from `pipeline.convertTable` |
+| Fill a currently empty column | Replace `emptyColumn(rowCount)` with the real source |
+
+`schema.py` is the single source of truth for the output contract; `validateOutputSchema`
+checks every produced frame against it before anything is written, so a mapping mistake
+fails loudly instead of silently shipping a broken CSV.

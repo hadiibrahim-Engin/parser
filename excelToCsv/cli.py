@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from excelToCsv.errors import ConversionError
-from excelToCsv.loggingSetup import configureLogging
+from excelToCsv.loggingSetup import addDebugFileHandler, configureLogging
 from excelToCsv.pipeline import runConversion
 
 #: Exit-Codes.
@@ -77,7 +77,18 @@ def buildParser() -> argparse.ArgumentParser:
         default="INFO",
         dest="logLevel",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Minimum log level (default: INFO).",
+        help="Minimum log level for the console (default: INFO).",
+    )
+    parser.add_argument(
+        "--debug-file",
+        type=Path,
+        default=None,
+        dest="debugFile",
+        metavar="PATH",
+        help=(
+            "Write a full DEBUG-level log to this file, in addition to the console. "
+            "Always contains full detail regardless of --log-level; plain text, no colors."
+        ),
     )
     colorGroup = parser.add_mutually_exclusive_group()
     colorGroup.add_argument(
@@ -115,6 +126,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         level=getattr(logging, arguments.logLevel),
         color=arguments.color,
     )
+    if arguments.debugFile is not None:
+        debugPath = addDebugFileHandler(logger, arguments.debugFile)
+        logger.info("Writing full debug log to: %s", debugPath)
 
     try:
         runConversion(

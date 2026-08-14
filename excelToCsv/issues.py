@@ -76,21 +76,27 @@ class IssueCollector:
     maxLoggedErrors: int = 200
 
     def error(self, problem: str, **context: object) -> None:
-        """Erfasst einen fatalen Befund und loggt ihn sofort."""
+        """Erfasst einen fatalen Befund und loggt ihn sofort.
+
+        ``stacklevel=2`` sorgt dafür, dass die Quellenangabe im Log auf das
+        aufrufende Fachmodul zeigt (z. B. ``stations.py``) statt auf diese Datei.
+        """
         issue = Issue(problem=problem, **context)  # type: ignore[arg-type]
         self.errors.append(issue)
         if len(self.errors) <= self.maxLoggedErrors:
-            self.logger.error(issue.render("Validation failed."))
+            self.logger.error(issue.render("Validation failed."), stacklevel=2)
         elif len(self.errors) == self.maxLoggedErrors + 1:
             self.logger.error(
-                "Further errors are suppressed after %d entries.", self.maxLoggedErrors
+                "Further errors are suppressed after %d entries.",
+                self.maxLoggedErrors,
+                stacklevel=2,
             )
 
     def warning(self, problem: str, **context: object) -> None:
         """Erfasst einen tolerierbaren Befund und loggt ihn sofort."""
         issue = Issue(problem=problem, **context)  # type: ignore[arg-type]
         self.warnings.append(issue)
-        self.logger.warning(issue.render("Tolerable issue."))
+        self.logger.warning(issue.render("Tolerable issue."), stacklevel=2)
 
     @property
     def failed(self) -> bool:
@@ -107,5 +113,6 @@ class IssueCollector:
             phase,
             count,
             "" if count == 1 else "s",
+            stacklevel=2,
         )
         raise ConversionError(f"{count} fatal error(s) during phase '{phase}'")
