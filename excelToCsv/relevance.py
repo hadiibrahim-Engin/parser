@@ -2,7 +2,7 @@
 
 The column names vary between deliveries, so they are detected by pattern and
 the operator/organisation name is extracted from the header. The result is a
-real JSON list per row, stored as a string.
+semicolon-separated string per row.
 """
 
 from __future__ import annotations

@@ -12,6 +12,7 @@ from excelToCsv.normalize import (
     LATITUDE_RANGE,
     LONGITUDE_RANGE,
     decimalPlaceCount,
+    followsStationIdConvention,
     isVirtualStation,
     normalizeCoordinate,
     normalizeDate,
@@ -322,6 +323,25 @@ def testNormalizeElementTypeIsCaseInsensitive() -> None:
 )
 def testSplitStationIdUsesLastUnderscore(elementId: str, name: str, level: str) -> None:
     assert splitStationId(elementId) == (name, level)
+
+
+@pytest.mark.parametrize(
+    ("elementId", "voltageLevel", "expected"),
+    [
+        ("Berlin_380", "380.0", True),
+        ("Station_A_110", "380/110", True),
+        ("Station_A_380/110", "380.0/110.0", True),
+        ("Berlin", "380", False),
+        ("Berlin_voltage", "380", False),
+        ("Berlin_220", "380", False),
+        ("_380", "380", False),
+        ("Berlin_", "380", False),
+    ],
+)
+def testStationIdConventionChecksTheVoltageSuffix(
+    elementId: str, voltageLevel: object, expected: bool
+) -> None:
+    assert followsStationIdConvention(elementId, voltageLevel) is expected
 
 
 @pytest.mark.parametrize("elementId", ["Xb_380", "Xfoo_220", "X_380"])

@@ -384,7 +384,7 @@ flowchart TD
 | `excelToCsv/schema.py` | Frozen contract: required input columns, valid types, exact output headers |
 | `excelToCsv/reader.py` | Excel I/O, header detection, column normalization, schema check |
 | `excelToCsv/normalize.py` | Pure value functions: date, voltage, coordinate, boolean, text, station id |
-| `excelToCsv/relevance.py` | Dynamic `Interesting/Relevant for` columns → JSON list |
+| `excelToCsv/relevance.py` | Dynamic `Interesting/Relevant for` columns → semicolon-separated text |
 | `excelToCsv/stations.py` | `SUB` rows → station records |
 | `excelToCsv/networkElements.py` | All other valid types → network element records |
 | `excelToCsv/validate.py` | Element types, duplicates, reference integrity, output schema |
@@ -407,21 +407,21 @@ works purely on data and can be tested without an Excel file at all.
 | # | Output column | Source | Transformation |
 | --- | --- | --- | --- |
 | 1 | `Eigentümer` | `TSO` | trimmed text |
-| 2 | `MJAP-ID` | `ELEMENT ID` | **unchanged** |
-| 3 | `Stationsname - Langname` | `LONG-NAME` | trimmed text |
+| 2 | `MJAP-ID` | `UCTE CODE` | trimmed UCTE identifier |
+| 3 | `Stationsname - Langname` | `LONG-NAME`, `ELEMENT ID` | long name; fallback `<LONG-NAME>_<ELEMENT ID>` if the id is not `<name>_<voltage>` |
 | 4 | `lat` | `Latitude` | normalized decimal, range checked |
 | 5 | `long` | `Longitude` | normalized decimal, range checked |
 | 6 | `Spannung` | `VOLTAGE-LEVEL` | JSON list, e.g. `["380","110"]` |
 | 7 | `IBN` | `STARTLIFETIME` | `DD.MM.YYYY` |
 | 8 | `ABN` | `ENDLIFETIME` | `DD.MM.YYYY` |
-| 9 | `Stationsname - Kurzname` | `LONG-NAME` | same as long name for now |
+| 9 | `Stationsname - Kurzname` | `LONG-NAME`, `ELEMENT ID` | same value as the station long name |
 | 10 | `reales UW` | derived from `ELEMENT ID` | `Wahr` / `Falsch` |
 | 11 | `Stationsname - OPC-Name` | — | empty |
 | 12 | `ID-GUID intern-1` | — | empty |
 | 13 | `ID-GUID intern-2` | — | empty |
 | 14 | `ID-OPC` | — | empty |
 | 15 | `ID-UCTE` | `UCTE CODE` | trimmed text |
-| 16 | `relevant für` | relevance columns | JSON list |
+| 16 | `relevant für` | relevance columns | matching organisations joined with `;` |
 | 17 | `ID` | `UCTE CODE` | identical to `ID-UCTE` |
 | 18 | `Kommentar` | `DESCRIPTION` | trimmed text |
 | 19 | `IBN - Mehrfach` | — | empty |
@@ -432,12 +432,12 @@ works purely on data and can be tested without an Excel file at all.
 | # | Output column | Source | Transformation |
 | --- | --- | --- | --- |
 | 1 | `Eigentümer` | `TSO` | trimmed text |
-| 2 | `MJAP-ID` | `ELEMENT ID` | the element's own id, not a station id |
+| 2 | `MJAP-ID` | `UCTE CODE` | trimmed UCTE identifier |
 | 3 | `Stromkreisname - Langname` | `LONG-NAME` | trimmed text |
 | 4 | `Region` | — | empty (`CCR/ROA` is explicitly **not** used) |
 | 5 | `Element Typ` | `ELEMENT-TYPE` | uppercase |
 | 6 | `Spannung` | `VOLTAGE-LEVEL` | normalized **text**, e.g. `380/110`, `DC` |
-| 7 | `relevant für` | relevance columns | JSON list |
+| 7 | `relevant für` | relevance columns | matching organisations joined with `;` |
 | 8 | `IBN` | `STARTLIFETIME` | `DD.MM.YYYY` |
 | 9 | `ABN` | `ENDLIFETIME` | `DD.MM.YYYY` |
 | 10 | `IBN - Mehrfach` | — | empty |
@@ -452,8 +452,8 @@ works purely on data and can be tested without an Excel file at all.
 | 22 | `ID-OPC` | — | empty |
 | 23 | `ID-UCTE` | `UCTE CODE` | trimmed text |
 | 24 | `ID` | — | empty (no defined source) |
-| 25 | `Station Anfang:MJAP-ID` | `Station 1` | same value as `Station Anfang` |
-| 26 | `Station Ende:MJAP-ID` | `Station 2` | same value as `Station Ende` |
+| 25 | `Station Anfang:MJAP-ID` | referenced station's `UCTE CODE` | resolved through the station named by `Station 1` |
+| 26 | `Station Ende:MJAP-ID` | referenced station's `UCTE CODE` | resolved through the station named by `Station 2` |
 | 27–30 | `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID`, `Y-Knoten-1: MJAP-ID`, `Y-Knoten-2: MJAP-ID` | — | empty |
 
 ### Ignored input columns
@@ -594,10 +594,10 @@ the organisation name is extracted from the header — preferably from the paren
 
 | `50Hertz` | `Amprion` | `TennetD` | Result |
 | --- | --- | --- | --- |
-| `1` | `0` | `True` | `["50Hertz","TennetD"]` |
-| `TRUE` | empty | `false` | `["50Hertz"]` |
-| `0` | `0` | `0` | `[]` |
-| `maybe` | `1` | `0` | `["Amprion"]` + `WARNING` |
+| `1` | `0` | `True` | `50Hertz;TennetD` |
+| `TRUE` | empty | `false` | `50Hertz` |
+| `0` | `0` | `0` | empty |
+| `maybe` | `1` | `0` | `Amprion` + `WARNING` |
 
 `TRUE`: `1`, `True`, `true`, `TRUE`. `FALSE`: `0`, `False`, `false`, `FALSE`, empty, `NaN`.
 Anything else produces a warning and is **not** treated as true — the converter never guesses.
@@ -613,7 +613,8 @@ business column and is never treated as a relevance column.
 | --- | --- | --- |
 | Missing required input column | fatal | Each missing column is named individually |
 | Unknown `ELEMENT-TYPE` | fatal | Aborts before any record is built |
-| Empty `ELEMENT ID` | fatal | Without an MJAP-ID the record is unusable |
+| Empty `ELEMENT ID` | fatal | The record cannot be named or referenced reliably |
+| Empty `UCTE CODE` | fatal | It is the required source of the MJAP-ID |
 | `SUB` without latitude or longitude | fatal | Applies to virtual stations too |
 | Coordinate out of range | fatal | Lat −90…90, long −180…180 |
 | Coordinate without a decimal separator | warning | Rebuilt from the column's precision, or guessed and marked `PLEASE VERIFY` |
@@ -644,8 +645,8 @@ Example (abridged):
 
 ```csv
 Eigentümer,MJAP-ID,Stationsname - Langname,lat,long,Spannung,IBN,ABN,...
-50Hertz,HRA_380,UW Hranice,52.459373,13.361402,"[""380""]",17.03.2001,,...
-TennetD,Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
+Amprion,DBERLIN1,Umspannwerk Berlin,52.459373,13.361402,"[""380""]",17.03.2001,,...
+TennetD,DXNODE01,X-Knoten b,51,6.5,"[""380""]",,,...
 ```
 
 ---
@@ -656,7 +657,7 @@ TennetD,Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 .venv/bin/python -m pytest
 ```
 
-**194 tests**, including all 25 cases required by the specification.
+**212 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |
@@ -694,7 +695,7 @@ Implementation choices that keep the transformation fast:
 
 * Column-wise work over NumPy object arrays instead of `DataFrame.iterrows()`.
 * `relevant für` is computed by packing each row's flags into a bitmask, so every distinct
-  combination is serialized to JSON exactly once instead of once per row.
+  combination is joined with semicolons exactly once instead of once per row.
 * Header detection short-circuits on a perfect match and never scans more than 100 rows.
 * Normalizers raise on bad values and the caller collects them; on Python 3.11+ a
   non-raising `try` block is free, so the happy path costs nothing.
@@ -709,9 +710,10 @@ Where the specification left a gap, the choice was made explicit rather than sil
 | --- | --- | --- |
 | Header not in row 1 | Detect automatically, discard the preamble | Real exports carry titles and metadata |
 | Weak header match | Accept with a warning | The schema check gives a far more actionable message |
-| Empty `ELEMENT ID` | Fatal | Without an MJAP-ID the record cannot be used or referenced |
+| Empty `ELEMENT ID` | Fatal | The record cannot be named or referenced reliably |
+| Empty `UCTE CODE` | Fatal | It is the required source of the MJAP-ID |
 | Completely empty Excel row | Skipped, reported at `INFO` | Trailing empty rows are normal; skipping is not silent |
-| Station id without `_` | Warning, whole id used as the name | Better than guessing a voltage level |
+| Station id not matching `<name>_<voltage>` | Warning, use `<LONG-NAME>_<ELEMENT ID>` | Keeps both available identifiers without guessing a voltage level |
 | Empty `VOLTAGE-LEVEL` on a station | `[]` | The honest JSON representation of "no voltages" |
 | Coordinate with both `.` and `,` | Last separator wins, warning | Deterministic and visible |
 | Coordinate without any separator | Repaired from the column's precision; guessed as a last resort | Forgotten separators are common; a run that has to guess says so loudly |

@@ -64,6 +64,24 @@ def testRelevanceAppliesToNetworkElementsToo(logger: logging.Logger) -> None:
     assert result.stations.iloc[0]["relevant für"] == ""
 
 
+def testSeveralOrganisationsApplyToNetworkElements(logger: logging.Logger) -> None:
+    rows = [
+        stationRow(**{RELEVANCE_50HERTZ: 0}),
+        stationRow(
+            **{
+                "ELEMENT ID": "Hamburg_380",
+                "Latitude": "53.5",
+                "Longitude": "9.9",
+                "UCTE CODE": "DHAMBRG1",
+                RELEVANCE_50HERTZ: 0,
+            }
+        ),
+        elementRow(**{RELEVANCE_50HERTZ: 1, RELEVANCE_TENNET: 1}),
+    ]
+    result = convertRows(rows, logger)
+    assert result.networkElements.iloc[0]["relevant für"] == "50Hertz;TennetD"
+
+
 def testWithoutRelevanceColumnsFieldStaysEmpty(logger: logging.Logger) -> None:
     result = convertRows([stationRow()], logger)
     assert result.stations.iloc[0]["relevant für"] == ""

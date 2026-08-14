@@ -18,7 +18,7 @@ def testRealStationIsMappedCompletely(logger: logging.Logger) -> None:
     assert len(result.networkElements) == 0
     station = result.stations.iloc[0]
     assert station["Eigentümer"] == "Amprion"
-    assert station["MJAP-ID"] == "Berlin_380"
+    assert station["MJAP-ID"] == "DBERLIN1"
     assert station["Stationsname - Langname"] == "Umspannwerk Berlin"
     assert station["Stationsname - Kurzname"] == "Umspannwerk Berlin"
     assert station["lat"] == "52.459373"
@@ -45,7 +45,7 @@ def testVirtualStationIsFlagged(logger: logging.Logger) -> None:
         logger,
     )
     station = result.stations.iloc[0]
-    assert station["MJAP-ID"] == "Xb_380"
+    assert station["MJAP-ID"] == "DBERLIN1"
     assert station["reales UW"] == "Falsch"
 
 
@@ -132,6 +132,31 @@ def testDuplicateStationIdIsFatal(logger: logging.Logger, logCapture: RecordingH
 def testStationWithoutElementIdIsFatal(logger: logging.Logger) -> None:
     with pytest.raises(ConversionError):
         convertRows([stationRow(**{"ELEMENT ID": ""})], logger)
+
+
+def testStationWithoutUcteCodeIsFatal(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    with pytest.raises(ConversionError):
+        convertRows([stationRow(**{"UCTE CODE": ""})], logger)
+
+    errors = logCapture.text(logging.ERROR)
+    assert "Station is missing the source for its MJAP-ID." in errors
+    assert "Field: UCTE CODE" in errors
+
+
+@pytest.mark.parametrize("elementId", ["Berlin", "Berlin_wrong", "Berlin_220"])
+def testInvalidStationIdConventionUsesLongNameAndElementId(
+    elementId: str, logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    result = convertRows([stationRow(**{"ELEMENT ID": elementId})], logger)
+    station = result.stations.iloc[0]
+
+    assert station["Stationsname - Langname"] == f"Umspannwerk Berlin_{elementId}"
+    assert station["Stationsname - Kurzname"] == f"Umspannwerk Berlin_{elementId}"
+    assert "does not follow the '<name>_<voltage>' convention" in logCapture.text(
+        logging.WARNING
+    )
 
 
 def testForgottenDecimalSeparatorIsRepaired(

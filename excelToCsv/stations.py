@@ -14,6 +14,7 @@ from excelToCsv.normalize import (
     LONGITUDE_RANGE,
     STATION_ID_SEPARATOR,
     decimalPlaceCount,
+    followsStationIdConvention,
     isVirtualStation,
     normalizeCoordinate,
     normalizeDate,
@@ -182,13 +183,22 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
     context.logger.info("Found %d station(s).", rowCount)
 
     elementIds = rows.elementIds
+    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
     for position, elementId in enumerate(elementIds):
         if not elementId:
             context.collector.error(
                 "Station is missing its identifier.",
                 field=COL_ELEMENT_ID,
                 value=None,
-                expected="Every SUB row requires a non-empty ELEMENT ID (the MJAP-ID).",
+                expected="Every SUB row requires a non-empty ELEMENT ID.",
+                **rows.context(position),
+            )
+        if not ucteCodes[position]:
+            context.collector.error(
+                "Station is missing the source for its MJAP-ID.",
+                field=COL_UCTE_CODE,
+                value=None,
+                expected="Every SUB row requires a non-empty UCTE CODE (the MJAP-ID).",
                 **rows.context(position),
             )
 
@@ -204,7 +214,7 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
     )
 
     longNames = textColumn(rows.frame, COL_LONG_NAME)
-    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
+    voltageLevels = columnValues(rows.frame, COL_VOLTAGE_LEVEL)
 
     realStation = np.empty(rowCount, dtype=object)
     stationNames = np.empty(rowCount, dtype=object)
@@ -226,7 +236,7 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
                 REAL_STATION_FALSE,
             )
 
-        if STATION_ID_SEPARATOR not in elementId:
+        if not followsStationIdConvention(elementId, voltageLevels[position]):
             stationNames[position] = buildFallbackStationName(
                 longNames[position], elementId
             )
@@ -234,7 +244,10 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
                 "Station ELEMENT ID does not follow the '<name>_<voltage>' convention.",
                 field=COL_ELEMENT_ID,
                 value=elementId,
-                expected="An ELEMENT ID of the form <name>_<voltage>, e.g. Berlin_380.",
+                expected=(
+                    "An ELEMENT ID of the form <name>_<voltage> whose suffix agrees "
+                    "with VOLTAGE-LEVEL, e.g. Berlin_380."
+                ),
                 action=f"Using '{stationNames[position]}' as the station name.",
                 **rows.context(position),
             )
@@ -250,7 +263,7 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
 
     data = {
         "Eigentümer": textColumn(rows.frame, COL_TSO),
-        "MJAP-ID": elementIds,
+        "MJAP-ID": ucteCodes,
         "Stationsname - Langname": stationNames,
         "lat": latitudes,
         "long": longitudes,

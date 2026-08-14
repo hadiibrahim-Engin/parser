@@ -86,11 +86,33 @@ def resolveStationReferences(
     return result
 
 
-def convertNetworkElements(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
+def stationReferenceMjapIds(
+    references: np.ndarray,
+    stationMjapByElementId: dict[str, str],
+) -> np.ndarray:
+    """Resolve input station ELEMENT IDs to the stations' UCTE-based MJAP-IDs."""
+    return np.fromiter(
+        (
+            MISSING_STATION_LITERAL
+            if reference == MISSING_STATION_LITERAL
+            else stationMjapByElementId.get(reference, "")
+            for reference in references
+        ),
+        dtype=object,
+        count=len(references),
+    )
+
+
+def convertNetworkElements(
+    rows: RowSet,
+    context: ConversionContext,
+    stationMjapByElementId: dict[str, str],
+) -> pd.DataFrame:
     """Build the network element records from all valid non-``SUB`` rows."""
     rowCount = len(rows)
     context.logger.info("Found %d network element(s).", rowCount)
 
+    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
     for position, elementId in enumerate(rows.elementIds):
         if not elementId:
             context.collector.error(
@@ -100,9 +122,19 @@ def convertNetworkElements(rows: RowSet, context: ConversionContext) -> pd.DataF
                 expected="Every network element row requires a non-empty ELEMENT ID.",
                 **rows.context(position),
             )
+        if not ucteCodes[position]:
+            context.collector.error(
+                "Network element is missing the source for its MJAP-ID.",
+                field=COL_UCTE_CODE,
+                value=None,
+                expected="Every network element requires a non-empty UCTE CODE (the MJAP-ID).",
+                **rows.context(position),
+            )
 
     stationStart = resolveStationReferences(rows, COL_STATION_1, context)
     stationEnd = resolveStationReferences(rows, COL_STATION_2, context)
+    stationStartMjap = stationReferenceMjapIds(stationStart, stationMjapByElementId)
+    stationEndMjap = stationReferenceMjapIds(stationEnd, stationMjapByElementId)
 
     voltages = np.fromiter(
         (normalizeVoltage(value) for value in columnValues(rows.frame, COL_VOLTAGE_LEVEL)),
@@ -113,7 +145,7 @@ def convertNetworkElements(rows: RowSet, context: ConversionContext) -> pd.DataF
 
     data = {
         "Eigentümer": textColumn(rows.frame, COL_TSO),
-        "MJAP-ID": rows.elementIds,
+        "MJAP-ID": ucteCodes,
         "Stromkreisname - Langname": longNames,
         "Region": emptyColumn(rowCount),
         "Element Typ": rows.elementTypes,
@@ -141,10 +173,10 @@ def convertNetworkElements(rows: RowSet, context: ConversionContext) -> pd.DataF
         "ID-GUID intern-1": emptyColumn(rowCount),
         "ID-GUID intern-2": emptyColumn(rowCount),
         "ID-OPC": emptyColumn(rowCount),
-        "ID-UCTE": textColumn(rows.frame, COL_UCTE_CODE),
+        "ID-UCTE": ucteCodes,
         "ID": emptyColumn(rowCount),
-        "Station Anfang:MJAP-ID": stationStart,
-        "Station Ende:MJAP-ID": stationEnd,
+        "Station Anfang:MJAP-ID": stationStartMjap,
+        "Station Ende:MJAP-ID": stationEndMjap,
         "Station T-1:MJAP-ID": emptyColumn(rowCount),
         "Station T-2:MJAP-ID": emptyColumn(rowCount),
         "Y-Knoten-1: MJAP-ID": emptyColumn(rowCount),

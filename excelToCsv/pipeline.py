@@ -97,8 +97,11 @@ def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
 
     stations = convertStations(stationRows, context)
     stationIndex = buildStationIndex(stationRows, collector)
+    stationMjapByElementId = dict(
+        zip(stationRows.elementIds, stations["MJAP-ID"].to_numpy(dtype=object), strict=True)
+    )
 
-    networkElements = convertNetworkElements(elementRows, context)
+    networkElements = convertNetworkElements(elementRows, context, stationMjapByElementId)
     validateStationReferences(elementRows, stationIndex, collector)
     validateDuplicateNetworkElements(elementRows, networkElements, collector)
 

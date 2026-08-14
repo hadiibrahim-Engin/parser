@@ -32,15 +32,15 @@ def testLineWithTwoValidStations(logger: logging.Logger) -> None:
 
     assert len(result.networkElements) == 1
     element = result.networkElements.iloc[0]
-    assert element["MJAP-ID"] == "LINE_471"
+    assert element["MJAP-ID"] == "DLINE471"
     assert element["Element Typ"] == "LINE"
     assert element["Stromkreisname - Langname"] == "Leitung Berlin - Hamburg"
     assert element["Stromkreisname - Kurzname"] == "Leitung Berlin - Hamburg"
     assert element["Spannung"] == "380"
     assert element["Station Anfang"] == "Berlin_380"
     assert element["Station Ende"] == "Hamburg_380"
-    assert element["Station Anfang:MJAP-ID"] == "Berlin_380"
-    assert element["Station Ende:MJAP-ID"] == "Hamburg_380"
+    assert element["Station Anfang:MJAP-ID"] == "DBERLIN1"
+    assert element["Station Ende:MJAP-ID"] == "DHAMBRG1"
     assert element["ID-UCTE"] == "DLINE471"
     assert element["Region"] == ""
     assert element["ID"] == ""
@@ -135,6 +135,17 @@ def testUnknownElementTypeIsFatal(
     assert "ELEMENT ID: ABC" in errors
     assert "ELEMENT-TYPE: XYZ" in errors
     assert "Row: 4" in errors
+
+
+def testNetworkElementWithoutUcteCodeIsFatal(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    with pytest.raises(ConversionError):
+        convertRows([*twoStations(), elementRow(**{"UCTE CODE": ""})], logger)
+
+    errors = logCapture.text(logging.ERROR)
+    assert "Network element is missing the source for its MJAP-ID." in errors
+    assert "Field: UCTE CODE" in errors
 
 
 def testElementTypeIsCaseInsensitive(logger: logging.Logger) -> None:

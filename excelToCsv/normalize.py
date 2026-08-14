@@ -482,6 +482,28 @@ def splitStationId(elementId: str) -> tuple[str, str]:
     return name, level
 
 
+def followsStationIdConvention(elementId: str, voltageLevel: object) -> bool:
+    """Return whether an id follows ``<name>_<voltage-level>``.
+
+    Merely containing an underscore is not sufficient: both parts must be
+    populated and the suffix must agree with ``VOLTAGE-LEVEL`` after the same
+    numeric normalization used for the output.  For aggregate station rows a
+    suffix may name either one of the listed levels or their complete ``/``
+    separated value.
+    """
+    name, level = splitStationId(elementId)
+    if not name or not level:
+        return False
+
+    normalizedLevel = normalizeVoltage(level)
+    expectedLevels = splitVoltages(voltageLevel)
+    if not normalizedLevel or not expectedLevels:
+        return False
+    return normalizedLevel in expectedLevels or normalizedLevel == _VOLTAGE_SEPARATOR.join(
+        expectedLevels
+    )
+
+
 def isVirtualStation(elementId: str) -> bool:
     """Return ``True`` when the name before the last ``_`` starts with ``X``."""
     name, _ = splitStationId(elementId)
