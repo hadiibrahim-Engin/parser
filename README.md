@@ -407,7 +407,7 @@ works purely on data and can be tested without an Excel file at all.
 | # | Output column | Source | Transformation |
 | --- | --- | --- | --- |
 | 1 | `Eigentümer` | `TSO` | trimmed text |
-| 2 | `MJAP-ID` | `UCTE CODE` | trimmed UCTE identifier |
+| 2 | `MJAP-ID` | `TSO`, `ELEMENT ID` | `<Eigentümer>_<ELEMENT ID>` |
 | 3 | `Stationsname - Langname` | `LONG-NAME`, `ELEMENT ID` | long name; fallback `<LONG-NAME>_<ELEMENT ID>` if the id is not `<name>_<voltage>` |
 | 4 | `lat` | `Latitude` | normalized decimal, range checked |
 | 5 | `long` | `Longitude` | normalized decimal, range checked |
@@ -432,7 +432,7 @@ works purely on data and can be tested without an Excel file at all.
 | # | Output column | Source | Transformation |
 | --- | --- | --- | --- |
 | 1 | `Eigentümer` | `TSO` | trimmed text |
-| 2 | `MJAP-ID` | `UCTE CODE` | trimmed UCTE identifier |
+| 2 | `MJAP-ID` | `TSO`, `ELEMENT ID` | `<Eigentümer>_<ELEMENT ID>` |
 | 3 | `Stromkreisname - Langname` | `LONG-NAME` | trimmed text |
 | 4 | `Region` | — | empty (`CCR/ROA` is explicitly **not** used) |
 | 5 | `Element Typ` | `ELEMENT-TYPE` | uppercase |
@@ -452,8 +452,8 @@ works purely on data and can be tested without an Excel file at all.
 | 22 | `ID-OPC` | — | empty |
 | 23 | `ID-UCTE` | `UCTE CODE` | trimmed text |
 | 24 | `ID` | — | empty (no defined source) |
-| 25 | `Station Anfang:MJAP-ID` | referenced station's `UCTE CODE` | resolved through the station named by `Station 1` |
-| 26 | `Station Ende:MJAP-ID` | referenced station's `UCTE CODE` | resolved through the station named by `Station 2` |
+| 25 | `Station Anfang:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | resolved through the station named by `Station 1` |
+| 26 | `Station Ende:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | resolved through the station named by `Station 2` |
 | 27–30 | `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID`, `Y-Knoten-1: MJAP-ID`, `Y-Knoten-2: MJAP-ID` | — | empty |
 
 ### Ignored input columns
@@ -614,7 +614,7 @@ business column and is never treated as a relevance column.
 | Missing required input column | fatal | Each missing column is named individually |
 | Unknown `ELEMENT-TYPE` | fatal | Aborts before any record is built |
 | Empty `ELEMENT ID` | fatal | The record cannot be named or referenced reliably |
-| Empty `UCTE CODE` | fatal | It is the required source of the MJAP-ID |
+| Empty `TSO` | fatal | The owner is required for `<owner>_<ELEMENT ID>` |
 | `SUB` without latitude or longitude | fatal | Applies to virtual stations too |
 | Coordinate out of range | fatal | Lat −90…90, long −180…180 |
 | Coordinate without a decimal separator | warning | Rebuilt from the column's precision, or guessed and marked `PLEASE VERIFY` |
@@ -645,8 +645,8 @@ Example (abridged):
 
 ```csv
 Eigentümer,MJAP-ID,Stationsname - Langname,lat,long,Spannung,IBN,ABN,...
-Amprion,DBERLIN1,Umspannwerk Berlin,52.459373,13.361402,"[""380""]",17.03.2001,,...
-TennetD,DXNODE01,X-Knoten b,51,6.5,"[""380""]",,,...
+Amprion,Amprion_Berlin_380,Umspannwerk Berlin,52.459373,13.361402,"[""380""]",17.03.2001,,...
+TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 ```
 
 ---
@@ -657,7 +657,7 @@ TennetD,DXNODE01,X-Knoten b,51,6.5,"[""380""]",,,...
 .venv/bin/python -m pytest
 ```
 
-**212 tests**, including all 25 cases required by the specification.
+**215 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |
@@ -711,7 +711,7 @@ Where the specification left a gap, the choice was made explicit rather than sil
 | Header not in row 1 | Detect automatically, discard the preamble | Real exports carry titles and metadata |
 | Weak header match | Accept with a warning | The schema check gives a far more actionable message |
 | Empty `ELEMENT ID` | Fatal | The record cannot be named or referenced reliably |
-| Empty `UCTE CODE` | Fatal | It is the required source of the MJAP-ID |
+| Empty `TSO` | Fatal | The owner is required for `<owner>_<ELEMENT ID>` |
 | Completely empty Excel row | Skipped, reported at `INFO` | Trailing empty rows are normal; skipping is not silent |
 | Station id not matching `<name>_<voltage>` | Warning, use `<LONG-NAME>_<ELEMENT ID>` | Keeps both available identifiers without guessing a voltage level |
 | Empty `VOLTAGE-LEVEL` on a station | `[]` | The honest JSON representation of "no voltages" |

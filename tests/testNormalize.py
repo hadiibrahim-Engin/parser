@@ -11,6 +11,7 @@ from excelToCsv.errors import NormalizationError
 from excelToCsv.normalize import (
     LATITUDE_RANGE,
     LONGITUDE_RANGE,
+    buildMjapId,
     decimalPlaceCount,
     followsStationIdConvention,
     isVirtualStation,
@@ -310,6 +311,12 @@ def testNormalizeTextTrimsAndKeepsIntegers() -> None:
 def testNormalizeElementTypeIsCaseInsensitive() -> None:
     assert normalizeElementType("sub") == "SUB"
     assert normalizeElementType(" Line ") == "LINE"
+
+
+def testMjapIdCombinesOwnerAndElementId() -> None:
+    assert buildMjapId(" Amprion ", " Berlin_380 ") == "Amprion_Berlin_380"
+    assert buildMjapId("", "Berlin_380") == ""
+    assert buildMjapId("Amprion", "") == ""
 
 
 @pytest.mark.parametrize(

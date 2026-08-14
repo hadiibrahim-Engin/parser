@@ -18,7 +18,7 @@ def testRealStationIsMappedCompletely(logger: logging.Logger) -> None:
     assert len(result.networkElements) == 0
     station = result.stations.iloc[0]
     assert station["Eigentümer"] == "Amprion"
-    assert station["MJAP-ID"] == "DBERLIN1"
+    assert station["MJAP-ID"] == "Amprion_Berlin_380"
     assert station["Stationsname - Langname"] == "Umspannwerk Berlin"
     assert station["Stationsname - Kurzname"] == "Umspannwerk Berlin"
     assert station["lat"] == "52.459373"
@@ -45,7 +45,7 @@ def testVirtualStationIsFlagged(logger: logging.Logger) -> None:
         logger,
     )
     station = result.stations.iloc[0]
-    assert station["MJAP-ID"] == "DBERLIN1"
+    assert station["MJAP-ID"] == "Amprion_Xb_380"
     assert station["reales UW"] == "Falsch"
 
 
@@ -134,15 +134,21 @@ def testStationWithoutElementIdIsFatal(logger: logging.Logger) -> None:
         convertRows([stationRow(**{"ELEMENT ID": ""})], logger)
 
 
-def testStationWithoutUcteCodeIsFatal(
+def testStationMjapIdDoesNotDependOnUcteCode(logger: logging.Logger) -> None:
+    station = convertRows([stationRow(**{"UCTE CODE": ""})], logger).stations.iloc[0]
+    assert station["MJAP-ID"] == "Amprion_Berlin_380"
+    assert station["ID-UCTE"] == ""
+
+
+def testStationWithoutOwnerIsFatal(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
     with pytest.raises(ConversionError):
-        convertRows([stationRow(**{"UCTE CODE": ""})], logger)
+        convertRows([stationRow(**{"TSO": ""})], logger)
 
     errors = logCapture.text(logging.ERROR)
-    assert "Station is missing the source for its MJAP-ID." in errors
-    assert "Field: UCTE CODE" in errors
+    assert "Station is missing the owner required for its MJAP-ID." in errors
+    assert "Field: TSO" in errors
 
 
 @pytest.mark.parametrize("elementId", ["Berlin", "Berlin_wrong", "Berlin_220"])

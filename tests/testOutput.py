@@ -106,11 +106,11 @@ def testWrittenCsvContentIsClean(tmp_path: Path, logger: logging.Logger) -> None
     ) as handle:
         elementRecords = list(csv.DictReader(handle))
     assert len(elementRecords) == 1
-    assert records[0]["MJAP-ID"] == "DBERLIN1"
-    assert elementRecords[0]["MJAP-ID"] == "DLINE471"
+    assert records[0]["MJAP-ID"] == "Amprion_Berlin_380"
+    assert elementRecords[0]["MJAP-ID"] == "Amprion_LINE_471"
     assert elementRecords[0]["Station Anfang"] == "Berlin_380"
-    assert elementRecords[0]["Station Anfang:MJAP-ID"] == "DBERLIN1"
-    assert elementRecords[0]["Station Ende:MJAP-ID"] == "DHAMBRG1"
+    assert elementRecords[0]["Station Anfang:MJAP-ID"] == "Amprion_Berlin_380"
+    assert elementRecords[0]["Station Ende:MJAP-ID"] == "Amprion_Hamburg_380"
     assert elementRecords[0]["Region"] == ""
 
 

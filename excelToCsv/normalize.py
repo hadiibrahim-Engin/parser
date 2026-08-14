@@ -470,6 +470,19 @@ _VIRTUAL_PREFIX: Final = "X"
 STATION_ID_SEPARATOR: Final = "_"
 
 
+def buildMjapId(owner: object, elementId: object) -> str:
+    """Build ``<owner>_<ELEMENT ID>`` from normalized source values.
+
+    An empty source produces an empty result so the transformation can collect
+    a precise validation error instead of inventing part of an identifier.
+    """
+    normalizedOwner = normalizeText(owner)
+    normalizedElementId = normalizeText(elementId)
+    if not normalizedOwner or not normalizedElementId:
+        return ""
+    return f"{normalizedOwner}{STATION_ID_SEPARATOR}{normalizedElementId}"
+
+
 def splitStationId(elementId: str) -> tuple[str, str]:
     """Split ``<stationName>_<voltageLevel>`` at the LAST ``_``.
 

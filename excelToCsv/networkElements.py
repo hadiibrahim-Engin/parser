@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from excelToCsv.context import ConversionContext, RowSet, emptyColumn
-from excelToCsv.normalize import normalizeDate, normalizeVoltage
+from excelToCsv.normalize import buildMjapId, normalizeDate, normalizeVoltage
 from excelToCsv.reader import applyNormalizer, columnValues, textColumn
 from excelToCsv.relevance import buildRelevantFor
 from excelToCsv.schema import (
@@ -90,7 +90,7 @@ def stationReferenceMjapIds(
     references: np.ndarray,
     stationMjapByElementId: dict[str, str],
 ) -> np.ndarray:
-    """Resolve input station ELEMENT IDs to the stations' UCTE-based MJAP-IDs."""
+    """Resolve station ELEMENT IDs to their ``<owner>_<ELEMENT ID>`` MJAP-IDs."""
     return np.fromiter(
         (
             MISSING_STATION_LITERAL
@@ -112,7 +112,16 @@ def convertNetworkElements(
     rowCount = len(rows)
     context.logger.info("Found %d network element(s).", rowCount)
 
+    owners = textColumn(rows.frame, COL_TSO)
     ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
+    mjapIds = np.fromiter(
+        (
+            buildMjapId(owner, elementId)
+            for owner, elementId in zip(owners, rows.elementIds, strict=True)
+        ),
+        dtype=object,
+        count=rowCount,
+    )
     for position, elementId in enumerate(rows.elementIds):
         if not elementId:
             context.collector.error(
@@ -122,12 +131,15 @@ def convertNetworkElements(
                 expected="Every network element row requires a non-empty ELEMENT ID.",
                 **rows.context(position),
             )
-        if not ucteCodes[position]:
+        if not owners[position]:
             context.collector.error(
-                "Network element is missing the source for its MJAP-ID.",
-                field=COL_UCTE_CODE,
+                "Network element is missing the owner required for its MJAP-ID.",
+                field=COL_TSO,
                 value=None,
-                expected="Every network element requires a non-empty UCTE CODE (the MJAP-ID).",
+                expected=(
+                    "Every network element requires a non-empty TSO value for "
+                    "<owner>_<ELEMENT ID>."
+                ),
                 **rows.context(position),
             )
 
@@ -144,8 +156,8 @@ def convertNetworkElements(
     longNames = textColumn(rows.frame, COL_LONG_NAME)
 
     data = {
-        "Eigentümer": textColumn(rows.frame, COL_TSO),
-        "MJAP-ID": ucteCodes,
+        "Eigentümer": owners,
+        "MJAP-ID": mjapIds,
         "Stromkreisname - Langname": longNames,
         "Region": emptyColumn(rowCount),
         "Element Typ": rows.elementTypes,

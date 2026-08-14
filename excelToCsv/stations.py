@@ -13,6 +13,7 @@ from excelToCsv.normalize import (
     LATITUDE_RANGE,
     LONGITUDE_RANGE,
     STATION_ID_SEPARATOR,
+    buildMjapId,
     decimalPlaceCount,
     followsStationIdConvention,
     isVirtualStation,
@@ -183,7 +184,16 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
     context.logger.info("Found %d station(s).", rowCount)
 
     elementIds = rows.elementIds
+    owners = textColumn(rows.frame, COL_TSO)
     ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
+    mjapIds = np.fromiter(
+        (
+            buildMjapId(owner, elementId)
+            for owner, elementId in zip(owners, elementIds, strict=True)
+        ),
+        dtype=object,
+        count=rowCount,
+    )
     for position, elementId in enumerate(elementIds):
         if not elementId:
             context.collector.error(
@@ -193,12 +203,12 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
                 expected="Every SUB row requires a non-empty ELEMENT ID.",
                 **rows.context(position),
             )
-        if not ucteCodes[position]:
+        if not owners[position]:
             context.collector.error(
-                "Station is missing the source for its MJAP-ID.",
-                field=COL_UCTE_CODE,
+                "Station is missing the owner required for its MJAP-ID.",
+                field=COL_TSO,
                 value=None,
-                expected="Every SUB row requires a non-empty UCTE CODE (the MJAP-ID).",
+                expected="Every SUB row requires a non-empty TSO value for <owner>_<ELEMENT ID>.",
                 **rows.context(position),
             )
 
@@ -262,8 +272,8 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
     )
 
     data = {
-        "Eigentümer": textColumn(rows.frame, COL_TSO),
-        "MJAP-ID": ucteCodes,
+        "Eigentümer": owners,
+        "MJAP-ID": mjapIds,
         "Stationsname - Langname": stationNames,
         "lat": latitudes,
         "long": longitudes,

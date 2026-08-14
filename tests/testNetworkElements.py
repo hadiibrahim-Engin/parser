@@ -17,6 +17,7 @@ def twoStations() -> list[dict[str, object]]:
         stationRow(
             **{
                 "ELEMENT ID": "Hamburg_380",
+                "TSO": "TennetD",
                 "LONG-NAME": "Umspannwerk Hamburg",
                 "Latitude": "53.551086",
                 "Longitude": "9.993682",
@@ -32,15 +33,15 @@ def testLineWithTwoValidStations(logger: logging.Logger) -> None:
 
     assert len(result.networkElements) == 1
     element = result.networkElements.iloc[0]
-    assert element["MJAP-ID"] == "DLINE471"
+    assert element["MJAP-ID"] == "Amprion_LINE_471"
     assert element["Element Typ"] == "LINE"
     assert element["Stromkreisname - Langname"] == "Leitung Berlin - Hamburg"
     assert element["Stromkreisname - Kurzname"] == "Leitung Berlin - Hamburg"
     assert element["Spannung"] == "380"
     assert element["Station Anfang"] == "Berlin_380"
     assert element["Station Ende"] == "Hamburg_380"
-    assert element["Station Anfang:MJAP-ID"] == "DBERLIN1"
-    assert element["Station Ende:MJAP-ID"] == "DHAMBRG1"
+    assert element["Station Anfang:MJAP-ID"] == "Amprion_Berlin_380"
+    assert element["Station Ende:MJAP-ID"] == "TennetD_Hamburg_380"
     assert element["ID-UCTE"] == "DLINE471"
     assert element["Region"] == ""
     assert element["ID"] == ""
@@ -137,15 +138,23 @@ def testUnknownElementTypeIsFatal(
     assert "Row: 4" in errors
 
 
-def testNetworkElementWithoutUcteCodeIsFatal(
+def testNetworkElementMjapIdDoesNotDependOnUcteCode(logger: logging.Logger) -> None:
+    element = convertRows(
+        [*twoStations(), elementRow(**{"UCTE CODE": ""})], logger
+    ).networkElements.iloc[0]
+    assert element["MJAP-ID"] == "Amprion_LINE_471"
+    assert element["ID-UCTE"] == ""
+
+
+def testNetworkElementWithoutOwnerIsFatal(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
     with pytest.raises(ConversionError):
-        convertRows([*twoStations(), elementRow(**{"UCTE CODE": ""})], logger)
+        convertRows([*twoStations(), elementRow(**{"TSO": ""})], logger)
 
     errors = logCapture.text(logging.ERROR)
-    assert "Network element is missing the source for its MJAP-ID." in errors
-    assert "Field: UCTE CODE" in errors
+    assert "Network element is missing the owner required for its MJAP-ID." in errors
+    assert "Field: TSO" in errors
 
 
 def testElementTypeIsCaseInsensitive(logger: logging.Logger) -> None:
