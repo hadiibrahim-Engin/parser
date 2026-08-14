@@ -32,6 +32,7 @@ python converter.py input.xlsx --output-dir ./output
 | --- | --- |
 | `-o`, `--output-dir` | Zielverzeichnis (Default: aktuelles Verzeichnis) |
 | `--sheet` | Worksheet als Name oder 0-basierter Index (Default: erstes Worksheet) |
+| `--header-row` | 1-basierte Excel-Zeile der Kopfzeile (Default: automatische Erkennung) |
 | `--engine` | `auto` (Default), `openpyxl` oder `calamine` |
 | `--encoding` | CSV-Kodierung (Default `utf-8`; `utf-8-sig` für Excel-freundliche BOM) |
 | `--quote-all` | Jedes Feld quoten statt nur die notwendigen |
@@ -45,7 +46,8 @@ Ohne `--sheet` wird das erste Worksheet verwendet und sein Name per `INFO` gelog
 ## Ablauf
 
 ```
-Excel lesen
+Excel roh lesen               (ohne Annahme über die Kopfzeile)
+  → Kopfzeile suchen          (Vorspann darüber verwerfen)
   → Spalten normalisieren       (trimmen, kanonische Schreibweise)
   → Inputschema validieren      (Pflichtspalten vorhanden?)
   → ELEMENT-TYPE klassifizieren (unbekannter Typ = fatal, Abbruch)
@@ -60,6 +62,43 @@ Es wird **nichts** geschrieben, solange nicht alle Validierungen fehlerfrei sind
 Beide Dateien entstehen zunächst als temporäre Dateien und werden erst danach atomar
 an ihren Zielnamen verschoben – auch ein I/O-Fehler hinterlässt also keinen halben Output.
 
+## Kopfzeile finden
+
+Die Kopfzeile steht nicht zwingend in Zeile 1 – in der Praxis liegen Titel, Stand und
+Hinweise darüber. Ihre Position wird deshalb **automatisch ermittelt**, eine feste
+Zeilennummer ist nirgends im Code verdrahtet.
+
+Die Datei wird ohne Kopfzeilenannahme eingelesen. Anschließend wird jede der ersten
+100 Zeilen bewertet: gezählt wird, wie viele der 13 Pflichtspalten sie als Überschrift
+enthält (case-insensitiv, whitespace-tolerant). Die erste Zeile mit der höchsten
+Trefferzahl gewinnt; bei vollständiger Übereinstimmung bricht die Suche sofort ab.
+**Alles oberhalb dieser Zeile wird verworfen** – der Vorspann muss weder ein bestimmtes
+Format haben noch leer sein.
+
+```
+INFO     Header detected in row 5 - skipping 4 leading row(s) above it.
+INFO     Found 6 data row(s) below the header.
+```
+
+Alle Zeilennummern in Warnungen und Fehlermeldungen beziehen sich weiterhin auf die
+**echte Excel-Zeile**, nicht auf die Position innerhalb der Daten – bei Kopfzeile in
+Zeile 5 beginnt die erste Datenzeile also bei `Row: 6`.
+
+Sonderfälle:
+
+* Passt eine Zeile nur schwach (weniger als die Hälfte der Pflichtspalten), wird sie
+  trotzdem verwendet, aber mit einer `WARNING` versehen. Die anschließende Schemaprüfung
+  nennt dann exakt die fehlende Spalte – hilfreicher als ein pauschales „nicht gefunden".
+* Enthält keine der abgesuchten Zeilen auch nur eine Pflichtspalte, bricht die Conversion
+  mit einem klaren Hinweis auf `--header-row` ab.
+* Ein Vorspanntext, in dem einzelne Spaltennamen vorkommen, verdrängt die echte
+  Kopfzeile nicht – diese trifft immer mehr Spalten.
+* Leere Zellen in der Kopfzeile erhalten den Platzhalternamen `Unnamed: <Position>`.
+* Mit `--header-row 5` lässt sich die Erkennung jederzeit übersteuern.
+
+Die Erkennung kostet nichts Messbares (0,3 ms bei 200.000 Zeilen), da nur die ersten
+Zeilen betrachtet werden und ein vollständiger Treffer die Suche beendet.
+
 ## Module
 
 | Datei | Verantwortung |
@@ -67,7 +106,7 @@ an ihren Zielnamen verschoben – auch ein I/O-Fehler hinterlässt also keinen h
 | `converter.py` | CLI-Einstiegspunkt |
 | `excelToCsv/cli.py` | Argumente, Exit-Codes |
 | `excelToCsv/schema.py` | Unveränderlicher Vertrag: Input-Pflichtspalten, ELEMENT-TYPEs, Output-Header |
-| `excelToCsv/reader.py` | Excel-I/O, Spaltennormalisierung, Schemaprüfung |
+| `excelToCsv/reader.py` | Excel-I/O, Kopfzeilenerkennung, Spaltennormalisierung, Schemaprüfung |
 | `excelToCsv/normalize.py` | Reine Wertfunktionen (Datum, Spannung, Koordinate, Boolean, Text) |
 | `excelToCsv/relevance.py` | Dynamische `Interesting/Relevant for`-Spalten → JSON-Liste |
 | `excelToCsv/stations.py` | `SUB` → Stationen-Datensatz |
@@ -154,6 +193,7 @@ Koordinaten oder fachlichen Werte erfunden.
 
 | Situation | Verhalten |
 | --- | --- |
+| Kopfzeile nicht in Zeile 1 | automatisch gesucht, Vorspann verworfen (siehe [Kopfzeile finden](#kopfzeile-finden)) |
 | `ELEMENT ID` leer | fatal – ohne MJAP-ID ist der Datensatz nicht verwendbar |
 | Komplett leere Excel-Zeile | wird übersprungen und per `INFO` gemeldet |
 | Station ohne `_` in der ID | `WARNING`, die volle ID gilt als Stationsname |
@@ -174,10 +214,11 @@ Mit `--quote-all` wird stattdessen jedes Feld gequotet.
 .venv/bin/python -m pytest
 ```
 
-122 Tests, u. a. alle 25 geforderten Fälle:
+141 Tests, u. a. alle 25 geforderten Fälle:
 
 | Datei | Abgedeckt |
 | --- | --- |
+| `tests/testHeaderDetection.py` | Kopfzeile in Zeile 5, echte Zeilennummern, `--header-row`, fehlende Kopfzeile |
 | `tests/testNormalize.py` | Spannung (6, 7), Koordinaten (5), Datum (9, 10), Boolean (19–21) |
 | `tests/testStations.py` | reale/virtuelle Station (1, 2), fehlende Koordinaten (3, 4), Spannungs-JSON (8), Dubletten (22) |
 | `tests/testNetworkElements.py` | LINE/TRA/TIE/DCL (11–15), GEN → `NaN` (16), unbekannte Referenz (17), unbekannter Typ (18) |

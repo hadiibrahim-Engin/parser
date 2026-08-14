@@ -47,6 +47,17 @@ def buildParser() -> argparse.ArgumentParser:
         help="Encoding of the CSV output (use utf-8-sig for Excel-friendly BOM).",
     )
     parser.add_argument(
+        "--header-row",
+        type=int,
+        default=None,
+        dest="headerRow",
+        metavar="N",
+        help=(
+            "1-based Excel row that holds the column headers. By default the header "
+            "row is detected automatically and everything above it is discarded."
+        ),
+    )
+    parser.add_argument(
         "--engine",
         default="auto",
         choices=["auto", "openpyxl", "calamine"],
@@ -114,6 +125,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             encoding=arguments.encoding,
             quoteAll=arguments.quoteAll,
             engine=arguments.engine,
+            headerRow=arguments.headerRow,
         )
     except ConversionError:
         # Die Ursache wurde bereits detailliert geloggt.

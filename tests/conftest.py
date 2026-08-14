@@ -106,6 +106,27 @@ def writeExcel(rows: list[dict[str, Any]], path: Path, sheetName: str = "Tabelle
     return path
 
 
+def writeExcelWithPreamble(
+    rows: list[dict[str, Any]],
+    path: Path,
+    preamble: list[list[Any]],
+    sheetName: str = "Tabelle1",
+) -> Path:
+    """Schreibt eine Mappe, deren Kopfzeile erst unterhalb eines Vorspanns steht."""
+    columns = columnsOf(rows)
+    grid: list[list[Any]] = []
+    for line in preamble:
+        padded = list(line)[: len(columns)]
+        grid.append(padded + [""] * (len(columns) - len(padded)))
+    grid.append(list(columns))
+    grid.extend([row.get(column, "") for column in columns] for row in rows)
+
+    pd.DataFrame(grid).to_excel(
+        path, index=False, header=False, sheet_name=sheetName, engine="openpyxl"
+    )
+    return path
+
+
 class RecordingHandler(logging.Handler):
     """Sammelt Log-Records, damit Tests Warnungen und Fehler prüfen können."""
 

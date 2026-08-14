@@ -129,9 +129,10 @@ def runConversion(
     encoding: str = "utf-8",
     quoteAll: bool = False,
     engine: str = DEFAULT_ENGINE,
+    headerRow: int | None = None,
 ) -> ConversionResult:
     """Vollständiger Lauf: Excel lesen, konvertieren, validieren, CSVs schreiben."""
-    table = buildInputTable(inputPath, sheet, logger, engine=engine)
+    table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
     result = convertTable(table, logger)
     result.stationsPath, result.networkElementsPath = writeCsvFiles(
         result.stations,
