@@ -86,6 +86,15 @@ VALID_ELEMENT_TYPES: Final[frozenset[str]] = (
 #: Literal written for a missing but tolerated station reference.
 MISSING_STATION_LITERAL: Final = "NaN"
 
+#: Filler for columns that are empty in EVERY row.
+#:
+#: ``pandas.read_csv`` infers the dtype of such a column as ``float64`` full of
+#: ``NaN``, which makes the ``.str`` accessor unusable downstream. A single space
+#: carries no business meaning, is indistinguishable from empty in a spreadsheet,
+#: and is enough for pandas to infer a text column. It is deliberately NOT a
+#: business value - inventing one would put fabricated data into the target system.
+DEFAULT_EMPTY_PLACEHOLDER: Final = " "
+
 #: The exact strings for "reales UW".
 REAL_STATION_TRUE: Final = "Wahr"
 REAL_STATION_FALSE: Final = "Falsch"

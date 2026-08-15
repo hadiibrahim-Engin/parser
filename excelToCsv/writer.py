@@ -16,10 +16,41 @@ from pathlib import Path
 import pandas as pd
 
 from excelToCsv.errors import ConversionError
-from excelToCsv.schema import NETWORK_ELEMENTS_FILENAME, STATIONS_FILENAME
+from excelToCsv.schema import (
+    DEFAULT_EMPTY_PLACEHOLDER,
+    NETWORK_ELEMENTS_FILENAME,
+    STATIONS_FILENAME,
+)
 
 #: Line ending per contract: a plain LF, independent of the operating system.
 LINE_TERMINATOR = "\n"
+
+
+def fillFullyEmptyColumns(frame: pd.DataFrame, placeholder: str) -> pd.DataFrame:
+    """Put ``placeholder`` into every cell of columns that are empty in all rows.
+
+    Purely a serialization concern: ``pandas.read_csv`` types an all-empty column
+    as ``float64``/``NaN``, so a reader cannot use the ``.str`` accessor on it.
+    Columns holding at least one real value are left untouched, and the in-memory
+    records keep their genuinely empty strings - only the file gets the filler.
+
+    An empty ``placeholder`` disables the behaviour entirely.
+    """
+    if not placeholder or frame.empty:
+        return frame
+
+    fullyEmpty = [
+        column
+        for column in frame.columns
+        if all(value == "" for value in frame[column].to_numpy(dtype=object))
+    ]
+    if not fullyEmpty:
+        return frame
+
+    filled = frame.copy()
+    for column in fullyEmpty:
+        filled[column] = placeholder
+    return filled
 
 
 def _writeSingleCsv(
@@ -57,6 +88,7 @@ def writeCsvFiles(
     *,
     encoding: str = "utf-8",
     quoteAll: bool = False,
+    emptyPlaceholder: str = DEFAULT_EMPTY_PLACEHOLDER,
 ) -> tuple[Path, Path]:
     """Write ``Stationen.csv`` and ``Netzelemente.csv``.
 
@@ -67,6 +99,8 @@ def writeCsvFiles(
         logger: Logger for the status messages.
         encoding: Output encoding (``utf-8-sig`` for an Excel-friendly BOM).
         quoteAll: ``True`` puts every field in quotes.
+        emptyPlaceholder: Filler for columns that are empty in every row, so a
+            reader does not type them as numeric. ``""`` keeps them truly empty.
 
     Returns:
         The paths of both written files.
@@ -83,6 +117,9 @@ def writeCsvFiles(
 
     stationsPath = outputDir / STATIONS_FILENAME
     networkElementsPath = outputDir / NETWORK_ELEMENTS_FILENAME
+
+    stations = fillFullyEmptyColumns(stations, emptyPlaceholder)
+    networkElements = fillFullyEmptyColumns(networkElements, emptyPlaceholder)
 
     try:
         _writeSingleCsv(stations, stationsPath, encoding, quoting)

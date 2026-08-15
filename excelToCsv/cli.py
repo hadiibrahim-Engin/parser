@@ -20,6 +20,7 @@ from excelToCsv.issues import (
 )
 from excelToCsv.loggingSetup import addDebugFileHandler, configureLogging
 from excelToCsv.pipeline import runConversion
+from excelToCsv.schema import DEFAULT_EMPTY_PLACEHOLDER
 
 #: Exit codes.
 EXIT_SUCCESS = 0
@@ -84,6 +85,17 @@ def buildParser() -> argparse.ArgumentParser:
         dest="logLevel",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Minimum log level for the console (default: INFO).",
+    )
+    parser.add_argument(
+        "--empty-placeholder",
+        default=DEFAULT_EMPTY_PLACEHOLDER,
+        dest="emptyPlaceholder",
+        metavar="TEXT",
+        help=(
+            "Filler for columns that are empty in every row (default: a single space). "
+            "Without it pandas types such a column as numeric NaN and the .str accessor "
+            "fails downstream. Pass '' to keep those columns truly empty."
+        ),
     )
     parser.add_argument(
         "--strict",
@@ -195,6 +207,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine=arguments.engine,
             headerRow=arguments.headerRow,
             strict=arguments.strict,
+            emptyPlaceholder=arguments.emptyPlaceholder,
         )
     except ConversionError as exc:
         # The cause has already been logged in full detail. The report matters

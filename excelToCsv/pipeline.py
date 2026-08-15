@@ -33,6 +33,7 @@ from excelToCsv.relevance import extractRelevanceColumns
 from excelToCsv.schema import (
     COL_ELEMENT_ID,
     COL_ELEMENT_TYPE,
+    DEFAULT_EMPTY_PLACEHOLDER,
     NETWORK_ELEMENT_COLUMNS,
     NETWORK_ELEMENTS_FILENAME,
     STATION_COLUMNS,
@@ -172,6 +173,7 @@ def runConversion(
     engine: str = DEFAULT_ENGINE,
     headerRow: int | None = None,
     strict: bool = False,
+    emptyPlaceholder: str = DEFAULT_EMPTY_PLACEHOLDER,
 ) -> ConversionResult:
     """Full run: read Excel, convert, validate, write the CSV files."""
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
@@ -183,6 +185,7 @@ def runConversion(
         logger,
         encoding=encoding,
         quoteAll=quoteAll,
+        emptyPlaceholder=emptyPlaceholder,
     )
     logger.info(
         "Conversion finished: %d station(s), %d network element(s), "
