@@ -85,7 +85,7 @@ def testRowNumbersMatchTheRealExcelRow(
     inputFile = writeExcelWithPreamble(rows, tmp_path / "input.xlsx", preamble)
 
     with pytest.raises(ConversionError):
-        runConversion(inputFile, tmp_path / "out", logger)
+        runConversion(inputFile, tmp_path / "out", logger, strict=True)
 
     # Header = preambleLength + 1, first data row = preambleLength + 2,
     # and the faulty row is the fourth data row.

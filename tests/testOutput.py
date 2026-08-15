@@ -115,13 +115,13 @@ def testWrittenCsvContentIsClean(tmp_path: Path, logger: logging.Logger) -> None
 
 
 def testNoCsvFilesOnFatalError(tmp_path: Path, logger: logging.Logger) -> None:
-    """Case 25: on a fatal error not a single CSV file is created."""
+    """Case 25: in strict mode a fatal error creates not a single CSV file."""
     rows = [*sampleRows(), elementRow(**{"ELEMENT ID": "LINE_9", "Station 2": ""})]
     inputFile = writeExcel(rows, tmp_path / "input.xlsx")
     outputDir = tmp_path / "out"
 
     with pytest.raises(ConversionError):
-        runConversion(inputFile, outputDir, logger)
+        runConversion(inputFile, outputDir, logger, strict=True)
 
     assert not (outputDir / STATIONS_FILENAME).exists()
     assert not (outputDir / NETWORK_ELEMENTS_FILENAME).exists()
@@ -148,9 +148,12 @@ def testCliReturnsZeroOnSuccess(
 
 
 def testCliReturnsNonZeroOnFatalError(tmp_path: Path) -> None:
+    """--strict keeps the original guarantee: no output at all."""
     rows = [*sampleRows(), elementRow(**{"ELEMENT ID": "LINE_9", "Station 1": ""})]
     inputFile = writeExcel(rows, tmp_path / "input.xlsx")
-    exitCode = main([str(inputFile), "--output-dir", str(tmp_path / "out"), "--no-color"])
+    exitCode = main(
+        [str(inputFile), "--output-dir", str(tmp_path / "out"), "--strict", "--no-color"]
+    )
 
     assert exitCode == EXIT_CONVERSION_ERROR
     assert not (tmp_path / "out" / STATIONS_FILENAME).exists()

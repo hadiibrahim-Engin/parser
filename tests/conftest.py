@@ -92,9 +92,17 @@ def makeTable(rows: list[dict[str, Any]], logger: logging.Logger) -> InputTable:
     return InputTable(frame=frame, rowNumbers=rowNumbers, sheetName="Tabelle1")
 
 
-def convertRows(rows: list[dict[str, Any]], logger: logging.Logger) -> ConversionResult:
-    """Convert row dicts directly (transformation without I/O)."""
-    return convertTable(makeTable(rows, logger), logger)
+def convertRows(
+    rows: list[dict[str, Any]],
+    logger: logging.Logger,
+    strict: bool = True,
+) -> ConversionResult:
+    """Convert row dicts directly (transformation without I/O).
+
+    Defaults to ``strict=True`` so a test can assert *that* a finding is fatal.
+    The lenient production default is covered by ``testLenientMode.py``.
+    """
+    return convertTable(makeTable(rows, logger), logger, strict=strict)
 
 
 def writeExcel(rows: list[dict[str, Any]], path: Path, sheetName: str = "Tabelle1") -> Path:

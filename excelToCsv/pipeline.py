@@ -38,6 +38,7 @@ from excelToCsv.schema import (
     STATION_COLUMNS,
     STATION_TYPE,
     STATIONS_FILENAME,
+    VALID_ELEMENT_TYPES,
 )
 from excelToCsv.stations import convertStations
 from excelToCsv.validate import (
@@ -59,19 +60,30 @@ class ConversionResult:
     networkElements: pd.DataFrame
     sheetName: str
     warningCount: int
+    errorCount: int = 0
     issues: list[ReportedIssue] = dataclassField(default_factory=list)
     stationsPath: Path | None = None
     networkElementsPath: Path | None = None
 
 
-def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
+def convertTable(
+    table: InputTable,
+    logger: logging.Logger,
+    strict: bool = False,
+) -> ConversionResult:
     """Transform a loaded input table into both target record sets.
 
-    Runs every validation and raises a
-    :class:`~excelToCsv.errors.ConversionError` on fatal findings, before
-    anything could be written.
+    Runs every validation. By default errors are logged in full but do NOT stop
+    the conversion, so both CSV files are produced and the log is the list of
+    things to fix. ``strict=True`` restores the original guarantee: any error
+    raises a :class:`~excelToCsv.errors.ConversionError` before anything is
+    written.
+
+    Rows whose ``ELEMENT-TYPE`` is unknown are the one exception: they cannot be
+    routed to either file, so in lenient mode they are dropped and reported
+    instead of being written with a bogus type.
     """
-    collector = IssueCollector(logger=logger)
+    collector = IssueCollector(logger=logger, strict=strict)
     context = ConversionContext(
         relevanceColumns=extractRelevanceColumns(list(table.frame.columns), logger),
         collector=collector,
@@ -93,6 +105,20 @@ def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
     validateElementTypes(elementTypes, allRows, collector)
     collector.abortIfFailed("element type classification")
 
+    classifiable = np.fromiter(
+        (elementType in VALID_ELEMENT_TYPES for elementType in elementTypes),
+        dtype=bool,
+        count=len(elementTypes),
+    )
+    if not classifiable.all():
+        logger.warning(
+            "Skipping %d row(s) with an unknown ELEMENT-TYPE - they cannot be routed "
+            "to either output file. See the errors above for the affected rows.",
+            int((~classifiable).sum()),
+        )
+        allRows = subsetRows(allRows, classifiable)
+        elementTypes = elementTypes[classifiable]
+
     stationMask = elementTypes == STATION_TYPE
     stationRows = subsetRows(allRows, stationMask)
     elementRows = subsetRows(allRows, ~stationMask)
@@ -113,7 +139,14 @@ def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
     validateOutputSchema(stations, STATION_COLUMNS, STATIONS_FILENAME, context)
     validateOutputSchema(networkElements, NETWORK_ELEMENT_COLUMNS, NETWORK_ELEMENTS_FILENAME, context)
 
-    if collector.warnings:
+    if collector.failed:
+        logger.critical(
+            "Completed WITH %d error(s) and %d warning(s). The CSV files are written "
+            "anyway - fix the errors listed above and rerun.",
+            len(collector.errors),
+            len(collector.warnings),
+        )
+    elif collector.warnings:
         logger.info("Validation successful with %d warning(s).", len(collector.warnings))
     else:
         logger.info("Validation successful.")
@@ -123,6 +156,7 @@ def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
         networkElements=networkElements,
         sheetName=table.sheetName,
         warningCount=len(collector.warnings),
+        errorCount=len(collector.errors),
         issues=collector.allIssues(),
     )
 
@@ -137,10 +171,11 @@ def runConversion(
     quoteAll: bool = False,
     engine: str = DEFAULT_ENGINE,
     headerRow: int | None = None,
+    strict: bool = False,
 ) -> ConversionResult:
     """Full run: read Excel, convert, validate, write the CSV files."""
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
-    result = convertTable(table, logger)
+    result = convertTable(table, logger, strict=strict)
     result.stationsPath, result.networkElementsPath = writeCsvFiles(
         result.stations,
         result.networkElements,
@@ -150,9 +185,11 @@ def runConversion(
         quoteAll=quoteAll,
     )
     logger.info(
-        "Conversion finished successfully: %d station(s), %d network element(s), %d warning(s).",
+        "Conversion finished: %d station(s), %d network element(s), "
+        "%d error(s), %d warning(s).",
         len(result.stations),
         len(result.networkElements),
+        result.errorCount,
         result.warningCount,
     )
     return result

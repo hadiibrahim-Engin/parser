@@ -178,6 +178,7 @@ class IssueCollector:
     errors: list[Issue] = field(default_factory=list)
     warnings: list[Issue] = field(default_factory=list)
     maxLoggedErrors: int = 200
+    strict: bool = False
 
     def error(self, problem: str, **context: object) -> None:
         """Record a fatal finding and log it immediately.
@@ -214,8 +215,13 @@ class IssueCollector:
         return sortIssues(combined)
 
     def abortIfFailed(self, phase: str) -> None:
-        """Abort the conversion when this phase produced any error."""
-        if not self.errors:
+        """Abort the conversion when this phase produced any error.
+
+        Only in ``strict`` mode. By default the errors have already been logged
+        in full and the conversion carries on, so the CSV files still get
+        written and the log is the list of things to fix.
+        """
+        if not self.errors or not self.strict:
             return
         count = len(self.errors)
         self.logger.critical(

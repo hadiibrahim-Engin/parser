@@ -86,6 +86,14 @@ def buildParser() -> argparse.ArgumentParser:
         help="Minimum log level for the console (default: INFO).",
     )
     parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Abort on the first phase that produced an error and write no CSV file at all. "
+            "By default errors are logged but both CSV files are still produced."
+        ),
+    )
+    parser.add_argument(
         "--issue-file",
         type=Path,
         default=None,
@@ -186,6 +194,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             quoteAll=arguments.quoteAll,
             engine=arguments.engine,
             headerRow=arguments.headerRow,
+            strict=arguments.strict,
         )
     except ConversionError as exc:
         # The cause has already been logged in full detail. The report matters
@@ -200,4 +209,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_UNEXPECTED
 
     writeReport(arguments.issueFile, result.issues, logger)
-    return EXIT_SUCCESS
+    # The files exist either way; the exit code still reports that the run had
+    # errors, so automation does not mistake a flawed run for a clean one.
+    return EXIT_CONVERSION_ERROR if result.errorCount else EXIT_SUCCESS

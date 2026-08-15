@@ -55,6 +55,7 @@ def testReportIsWrittenEvenWhenTheConversionAborts(tmp_path: Path) -> None:
             str(tmp_path / "out"),
             "--issue-file",
             str(report),
+            "--strict",
             "--no-color",
         ]
     )
