@@ -12,7 +12,16 @@ from __future__ import annotations
 
 
 class ConversionError(Exception):
-    """Fatal error: the conversion is aborted and no CSV files are produced."""
+    """Fatal error: the conversion is aborted and no CSV files are produced.
+
+    Carries the structured findings that caused the abort so the caller can
+    still write a report - the whole point of the report is to exist for the
+    run that failed.
+    """
+
+    def __init__(self, message: str, issues: list[object] | None = None) -> None:
+        super().__init__(message)
+        self.issues: list[object] = issues or []
 
 
 class NormalizationError(ValueError):

@@ -12,14 +12,14 @@ The fixed order:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclassField
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from excelToCsv.context import ConversionContext, RowSet, subsetRows
-from excelToCsv.issues import IssueCollector
+from excelToCsv.issues import IssueCollector, ReportedIssue
 from excelToCsv.networkElements import convertNetworkElements
 from excelToCsv.normalize import normalizeElementType
 from excelToCsv.reader import (
@@ -44,6 +44,7 @@ from excelToCsv.validate import (
     buildStationIndex,
     validateDuplicateNetworkElements,
     validateElementTypes,
+    validateMultipodReferences,
     validateOutputSchema,
     validateStationReferences,
 )
@@ -58,6 +59,7 @@ class ConversionResult:
     networkElements: pd.DataFrame
     sheetName: str
     warningCount: int
+    issues: list[ReportedIssue] = dataclassField(default_factory=list)
     stationsPath: Path | None = None
     networkElementsPath: Path | None = None
 
@@ -103,6 +105,7 @@ def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
 
     networkElements = convertNetworkElements(elementRows, context, stationMjapByElementId)
     validateStationReferences(elementRows, stationIndex, collector)
+    validateMultipodReferences(elementRows, stationIndex, collector)
     validateDuplicateNetworkElements(elementRows, networkElements, collector)
 
     collector.abortIfFailed("validation")
@@ -120,6 +123,7 @@ def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
         networkElements=networkElements,
         sheetName=table.sheetName,
         warningCount=len(collector.warnings),
+        issues=collector.allIssues(),
     )
 
 

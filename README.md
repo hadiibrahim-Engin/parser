@@ -24,6 +24,7 @@ Three rules drive every design decision:
 - [How it works](#how-it-works)
 - [Finding the header row](#finding-the-header-row)
 - [Classification](#classification)
+- [Multipod](#multipod)
 - [Error strategy](#error-strategy)
 - [Logging](#logging)
 - [Module map](#module-map)
@@ -70,6 +71,7 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 | `--encoding` | Output encoding (default `utf-8`; use `utf-8-sig` for an Excel-friendly BOM) |
 | `--quote-all` | Quote every CSV field instead of only those that require it |
 | `--log-level` | Console minimum level: `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, `CRITICAL` |
+| `--issue-file PATH` | Write every error and warning to a workable list, sorted by Excel row |
 | `--debug-file PATH` | Also write a full `DEBUG`-level log to this file, independent of `--log-level` |
 | `--color` / `--no-color` | Force or disable colored log output |
 
@@ -221,6 +223,93 @@ coordinates.
 
 ---
 
+## Multipod
+
+A three-legged line is stored as **three separate rows** that all reference the same
+virtual station in the `Multipod` column. That reference is what ties the legs together.
+
+```
+virtual station: XStationK_380
+
+LINE_001  XStationK_380 <-> StationA_380   Multipod = XStationK_380
+LINE_002  XStationK_380 <-> StationB_380   Multipod = XStationK_380
+LINE_003  XStationK_380 <-> StationC_380   Multipod = XStationK_380
+```
+
+```mermaid
+flowchart LR
+    SA["StationA_380"] --- L1["LINE_001"] --- X(["XStationK_380<br/>virtual SUB row"])
+    SB["StationB_380"] --- L2["LINE_002"] --- X
+    SC["StationC_380"] --- L3["LINE_003"] --- X
+```
+
+The converter **does not aggregate** the legs. Three input rows stay three rows in
+`Netzelemente.csv`; `Multipod` only marks and references the shared virtual node.
+
+### Mapping
+
+| Output column | Value |
+| --- | --- |
+| `Y-Knoten-1` | The `Multipod` value, trimmed and otherwise unchanged |
+| `Y-Knoten-1: MJAP-ID` | MJAP-ID of the referenced virtual station |
+| `Y-Knoten-2`, `Y-Knoten-2: MJAP-ID` | Empty — no business rule defined yet |
+
+An empty `Multipod` leaves all four fields empty. The column itself may be absent
+from the workbook entirely.
+
+`Y-Knoten-1` and `Y-Knoten-1: MJAP-ID` follow the same split as `Station Anfang` /
+`Station Anfang:MJAP-ID`: the plain column keeps the referenced `ELEMENT ID`, the
+`:MJAP-ID` column carries the resolved `<owner>_<ELEMENT ID>`.
+
+### Validation
+
+```mermaid
+flowchart TD
+    A{"Multipod populated?"} -->|no| B["Y node columns stay empty"]
+    A -->|yes| C{"SUB row with this ELEMENT ID exists?"}
+    C -->|no| D["Fatal: Multipod references an unknown virtual station"]
+    C -->|yes| E{"Follows X-name-voltage convention?"}
+    E -->|no| F["WARNING: naming convention not met, conversion continues"]
+    E -->|yes| G["Accepted silently"]
+    F --> H["Populate Y-Knoten-1 and Y-Knoten-1: MJAP-ID"]
+    G --> H
+```
+
+A dangling reference is fatal, because the Y node columns would otherwise carry a
+reference to a station that does not exist:
+
+```
+ERROR    validate.py:157   Validation failed.
+         Row: 133
+         ELEMENT ID: LINE_002
+         ELEMENT-TYPE: LINE
+         Field: Multipod
+         Value: XDoesNotExist_380
+         Problem: Multipod references an unknown virtual station.
+         Expected: Every Multipod value must reference an existing SUB ELEMENT ID.
+```
+
+A station that **exists** but breaks the naming convention only warns — the reference
+itself is intact:
+
+```
+WARNING  validate.py:169   Tolerable issue.
+         Field: Multipod
+         Value: StationK_380
+         Problem: Multipod references a valid SUB station, but its ELEMENT ID does not
+                  follow the expected virtual-station X naming convention.
+         Expected: Pattern X<StationName>_<VoltageLevel>, e.g. XStationK_380.
+         Action: Keeping the reference unchanged and continuing.
+```
+
+**Nothing is renamed or invented.** Legacy data such as `StationK` is not rebuilt into
+`XStationK_380`, no voltage level is appended, and no virtual station is ever created.
+Bringing the input onto the uniform form happens outside this converter.
+
+`Map Multipod` stays irrelevant and influences no conversion logic whatsoever.
+
+---
+
 ## Error strategy
 
 ```mermaid
@@ -303,6 +392,36 @@ recorded. This is covered by tests.
 Colors: `DEBUG` dim, `INFO` green, `WARNING` yellow, `ERROR` red, `CRITICAL` white on red.
 Colors come from `colorlog` when installed, with a built-in ANSI table as fallback, and are
 disabled automatically when stderr is not a TTY or `NO_COLOR` is set.
+
+### Working through the findings
+
+`--issue-file PATH` writes every error and warning of the run to one workable list —
+**including the run that aborted**, which is exactly the run whose errors need fixing:
+
+```bash
+python converter.py input.xlsx --issue-file issues.csv
+```
+
+A `.csv` target opens straight in Excel next to the input workbook, sorted by `Row`:
+
+| Severity | Row | ELEMENT ID | ELEMENT-TYPE | Field | Value | Problem |
+| --- | --- | --- | --- | --- | --- | --- |
+| WARNING | 3 | Berlin_220 | SUB | ELEMENT ID | Berlin_220 | Station ELEMENT ID does not follow the convention |
+| WARNING | 7 | GEN_42 | GEN | Station 2 | `<empty>` | Station reference is missing |
+| ERROR | 9 | LINE_999 | LINE | Station 1 | NICHT_DA_380 | Station reference does not match any station |
+
+Findings are ordered by Excel row, errors before warnings on the same row, and
+schema-level findings without a row last. The file carries a UTF-8 BOM so umlauts
+survive a double-click into Excel. Any other suffix (`.log`, `.txt`) produces the same
+readable blocks as the console instead.
+
+A failure raised outside the row-level validation — a missing input column, an
+unreadable file — has no row context, so the message itself becomes the single entry
+rather than leaving an empty report behind. A completely clean run writes a header-only
+file, which proves the run was checked rather than skipped.
+
+`--issue-file` and `--debug-file` are independent and can be combined: the first is the
+short list of things to fix, the second the full trace of what happened.
 
 ### Capturing a full debug log
 
@@ -444,7 +563,9 @@ works purely on data and can be tested without an Excel file at all.
 | 11 | `ABN - Mehrfach` | — | empty |
 | 12 | `Station Anfang` | `Station 1` | value, or literal `NaN` when optional and missing |
 | 13 | `Station Ende` | `Station 2` | value, or literal `NaN` when optional and missing |
-| 14–17 | `Station T-1`, `Station T-2`, `Y-Knoten-1`, `Y-Knoten-2` | — | empty |
+| 14–15 | `Station T-1`, `Station T-2` | — | empty |
+| 16 | `Y-Knoten-1` | `Multipod` | The referenced virtual station, unchanged; empty when `Multipod` is empty |
+| 17 | `Y-Knoten-2` | — | empty (no rule defined yet) |
 | 18 | `Stromkreisname - Kurzname` | `LONG-NAME` | same as long name for now |
 | 19 | `Stromkreisname - OPC-Name` | — | empty |
 | 20 | `ID-GUID intern-1` | — | empty |
@@ -454,13 +575,16 @@ works purely on data and can be tested without an Excel file at all.
 | 24 | `ID` | — | empty (no defined source) |
 | 25 | `Station Anfang:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | resolved through the station named by `Station 1` |
 | 26 | `Station Ende:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | resolved through the station named by `Station 2` |
-| 27–30 | `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID`, `Y-Knoten-1: MJAP-ID`, `Y-Knoten-2: MJAP-ID` | — | empty |
+| 27–28 | `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID` | — | empty |
+| 29 | `Y-Knoten-1: MJAP-ID` | `Multipod` | MJAP-ID of the referenced virtual station |
+| 30 | `Y-Knoten-2: MJAP-ID` | — | empty |
 
 ### Ignored input columns
 
-`CCR/ROA`, `ACTION`, `Map Multipod`, `Multipod`, `OPC INTERESTING ASSET`, `OPC Map only`,
+`CCR/ROA`, `ACTION`, `Map Multipod`, `OPC INTERESTING ASSET`, `OPC Map only`,
 `interconnector …`. They may be present or absent and never influence the result.
-**No multipod logic and no OPC logic is implemented.**
+**No OPC logic is implemented.** `Multipod` itself is evaluated - see [Multipod](#multipod);
+`Map Multipod` remains irrelevant.
 
 ---
 
@@ -617,6 +741,8 @@ business column and is never treated as a relevance column.
 | Empty `TSO` | fatal | The owner is required for `<owner>_<ELEMENT ID>` |
 | `SUB` without latitude or longitude | fatal | Applies to virtual stations too |
 | Coordinate out of range | fatal | Lat −90…90, long −180…180 |
+| Multipod references a missing SUB row | fatal | No dangling reference reaches the Y node columns |
+| Multipod references a SUB row without the X convention | warning | The reference is intact; nothing is renamed |
 | Coordinate without a decimal separator | warning | Rebuilt from the column's precision, or guessed and marked `PLEASE VERIFY` |
 | Unparsable date | fatal | No broken date is ever passed through |
 | `LINE`/`TRA`/`TIE`/`DCL` missing a station | fatal | Both references are mandatory |
@@ -657,7 +783,7 @@ TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 .venv/bin/python -m pytest
 ```
 
-**215 tests**, including all 25 cases required by the specification.
+**244 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |
@@ -666,6 +792,8 @@ TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 | `tests/testNetworkElements.py` | LINE/TRA/TIE/DCL (11–15), GEN → `NaN` (16), unknown reference (17), unknown type (18) |
 | `tests/testRelevance.py` | `relevant für` from 0/1 and True/False (19–21), ignored columns |
 | `tests/testOutput.py` | Exact header order (23, 24), no CSVs on fatal error (25), CLI, engine equality |
+| `tests/testIssueReport.py` | `--issue-file` on aborted and clean runs, CSV/text formats, row ordering, BOM |
+| `tests/testMultipod.py` | Y nodes from `Multipod`, three legs stay three rows, unknown reference, naming warning, `Map Multipod` irrelevance |
 | `tests/testHeaderDetection.py` | Header in row 5, real Excel row numbers, `--header-row`, missing header |
 | `tests/testLogging.py` | Block indentation, blank-line separation, source location, `--debug-file` |
 

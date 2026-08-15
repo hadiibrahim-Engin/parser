@@ -9,13 +9,38 @@ The central error strategy:
 
 from __future__ import annotations
 
+import csv
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Final
 
 from excelToCsv.errors import ConversionError
 
 #: How an empty value is rendered in log messages.
 EMPTY_DISPLAY = "<empty>"
+
+SEVERITY_ERROR: Final = "ERROR"
+SEVERITY_WARNING: Final = "WARNING"
+
+#: Column order of the issue report; ``Row`` first so it sorts next to the input.
+REPORT_COLUMNS: Final[tuple[str, ...]] = (
+    "Severity",
+    "Row",
+    "ELEMENT ID",
+    "ELEMENT-TYPE",
+    "Field",
+    "Value",
+    "Problem",
+    "Expected",
+    "Action",
+)
+
+#: Suffixes that produce a spreadsheet-friendly report instead of a text log.
+CSV_SUFFIXES: Final[frozenset[str]] = frozenset({".csv"})
+
+#: BOM encoding, so umlauts survive a double-click into Excel.
+REPORT_CSV_ENCODING: Final = "utf-8-sig"
 
 
 def formatValue(value: object) -> str:
@@ -57,6 +82,86 @@ class Issue:
         if self.action:
             lines.append(f"Action: {self.action}")
         return "\n".join(lines)
+
+
+#: A finding together with the severity it was reported at.
+ReportedIssue = tuple[str, "Issue"]
+
+
+def sortIssues(issues: list[ReportedIssue]) -> list[ReportedIssue]:
+    """Order findings by Excel row so the report can be worked top to bottom.
+
+    Errors come before warnings for the same row, and findings without a row
+    (schema-level problems) go last because they are not tied to a cell.
+    """
+    severityOrder = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1}
+    return sorted(
+        issues,
+        key=lambda entry: (
+            entry[1].row is None,
+            entry[1].row or 0,
+            severityOrder.get(entry[0], 9),
+        ),
+    )
+
+
+def issueRow(severity: str, issue: Issue) -> list[str]:
+    """Flatten a finding into one report row, in :data:`REPORT_COLUMNS` order."""
+    return [
+        severity,
+        "" if issue.row is None else str(issue.row),
+        issue.elementId,
+        issue.elementType,
+        issue.field,
+        "" if issue.value is None and not issue.field else formatValue(issue.value),
+        issue.problem,
+        issue.expected,
+        issue.action,
+    ]
+
+
+def writeIssueReport(
+    issues: list[ReportedIssue],
+    path: Path,
+    logger: logging.Logger,
+) -> Path:
+    """Write every finding of the run to ``path`` so it can be worked through.
+
+    A ``.csv`` target produces a spreadsheet the user can open next to the input
+    workbook and sort by ``Row``; any other suffix produces the same readable
+    blocks as the console. The file is always written - including for the run
+    that aborted, which is exactly the run whose errors need fixing.
+
+    Returns:
+        The absolute path of the written report.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ordered = sortIssues(issues)
+
+    if path.suffix.lower() in CSV_SUFFIXES:
+        with path.open("w", encoding=REPORT_CSV_ENCODING, newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(REPORT_COLUMNS)
+            writer.writerows(issueRow(severity, issue) for severity, issue in ordered)
+    else:
+        blocks = [
+            issue.render(f"{severity} {index}/{len(ordered)}")
+            for index, (severity, issue) in enumerate(ordered, start=1)
+        ]
+        header = f"{len(ordered)} finding(s) - errors must be fixed before a rerun succeeds.\n"
+        path.write_text(
+            header + "\n" + "\n\n".join(blocks) + ("\n" if blocks else ""),
+            encoding="utf-8",
+        )
+
+    errorCount = sum(1 for severity, _ in ordered if severity == SEVERITY_ERROR)
+    logger.info(
+        "Wrote issue report with %d error(s) and %d warning(s) to: %s",
+        errorCount,
+        len(ordered) - errorCount,
+        path.resolve(),
+    )
+    return path.resolve()
 
 
 @dataclass(slots=True)
@@ -102,6 +207,12 @@ class IssueCollector:
         """``True`` as soon as at least one fatal error has been recorded."""
         return bool(self.errors)
 
+    def allIssues(self) -> list[ReportedIssue]:
+        """Every finding with its severity, errors first, then by Excel row."""
+        combined = [(SEVERITY_ERROR, issue) for issue in self.errors]
+        combined += [(SEVERITY_WARNING, issue) for issue in self.warnings]
+        return sortIssues(combined)
+
     def abortIfFailed(self, phase: str) -> None:
         """Abort the conversion when this phase produced any error."""
         if not self.errors:
@@ -114,4 +225,7 @@ class IssueCollector:
             "" if count == 1 else "s",
             stacklevel=2,
         )
-        raise ConversionError(f"{count} fatal error(s) during phase '{phase}'")
+        raise ConversionError(
+            f"{count} fatal error(s) during phase '{phase}'",
+            issues=list(self.allIssues()),
+        )

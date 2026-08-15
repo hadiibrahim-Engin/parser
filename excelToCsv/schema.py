@@ -43,18 +43,26 @@ REQUIRED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     COL_ENDLIFETIME,
 )
 
+#: Reference to the virtual station shared by the legs of a multipod line.
+COL_MULTIPOD: Final = "Multipod"
+
+#: Columns that carry business logic but may legitimately be absent.
+OPTIONAL_INPUT_COLUMNS: Final[tuple[str, ...]] = (COL_MULTIPOD,)
+
 #: Known columns that carry no business logic here. They may be absent.
+#: ``Map Multipod`` stays irrelevant - only ``Multipod`` itself is evaluated.
 IGNORED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     "Map Multipod",
     "ACTION",
     "OPC INTERESTING ASSET",
-    "Multipod",
     "CCR/ROA",
     "OPC Map only",
 )
 
 #: Every column whose canonical spelling is known (used for the rename).
-KNOWN_INPUT_COLUMNS: Final[tuple[str, ...]] = REQUIRED_INPUT_COLUMNS + IGNORED_INPUT_COLUMNS
+KNOWN_INPUT_COLUMNS: Final[tuple[str, ...]] = (
+    REQUIRED_INPUT_COLUMNS + OPTIONAL_INPUT_COLUMNS + IGNORED_INPUT_COLUMNS
+)
 
 # --------------------------------------------------------------------------- #
 # ELEMENT-TYPE

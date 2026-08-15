@@ -14,6 +14,7 @@ from excelToCsv.schema import (
     COL_ELEMENT_ID,
     COL_ENDLIFETIME,
     COL_LONG_NAME,
+    COL_MULTIPOD,
     COL_STARTLIFETIME,
     COL_STATION_1,
     COL_STATION_2,
@@ -103,6 +104,27 @@ def stationReferenceMjapIds(
     )
 
 
+def multipodMjapIds(
+    multipods: np.ndarray,
+    stationMjapByElementId: dict[str, str],
+) -> np.ndarray:
+    """Resolve multipod references to the MJAP-ID of the virtual station.
+
+    Mirrors :func:`stationReferenceMjapIds`: the plain column keeps the
+    referenced ``ELEMENT ID``, the ``:MJAP-ID`` column carries the resolved
+    ``<owner>_<ELEMENT ID>``. An empty reference stays empty; an unresolvable
+    one is already a fatal error raised by the validation step.
+    """
+    return np.fromiter(
+        (
+            stationMjapByElementId.get(reference, "") if reference else ""
+            for reference in multipods
+        ),
+        dtype=object,
+        count=len(multipods),
+    )
+
+
 def convertNetworkElements(
     rows: RowSet,
     context: ConversionContext,
@@ -148,6 +170,12 @@ def convertNetworkElements(
     stationStartMjap = stationReferenceMjapIds(stationStart, stationMjapByElementId)
     stationEndMjap = stationReferenceMjapIds(stationEnd, stationMjapByElementId)
 
+    # A populated Multipod names the virtual station shared by the legs of a
+    # three-legged line. The legs stay separate records - the reference is only
+    # carried into the Y node columns.
+    multipods = textColumn(rows.frame, COL_MULTIPOD)
+    multipodMjap = multipodMjapIds(multipods, stationMjapByElementId)
+
     voltages = np.fromiter(
         (normalizeVoltage(value) for value in columnValues(rows.frame, COL_VOLTAGE_LEVEL)),
         dtype=object,
@@ -178,7 +206,7 @@ def convertNetworkElements(
         "Station Ende": stationEnd,
         "Station T-1": emptyColumn(rowCount),
         "Station T-2": emptyColumn(rowCount),
-        "Y-Knoten-1": emptyColumn(rowCount),
+        "Y-Knoten-1": multipods,
         "Y-Knoten-2": emptyColumn(rowCount),
         "Stromkreisname - Kurzname": longNames,
         "Stromkreisname - OPC-Name": emptyColumn(rowCount),
@@ -191,7 +219,7 @@ def convertNetworkElements(
         "Station Ende:MJAP-ID": stationEndMjap,
         "Station T-1:MJAP-ID": emptyColumn(rowCount),
         "Station T-2:MJAP-ID": emptyColumn(rowCount),
-        "Y-Knoten-1: MJAP-ID": emptyColumn(rowCount),
+        "Y-Knoten-1: MJAP-ID": multipodMjap,
         "Y-Knoten-2: MJAP-ID": emptyColumn(rowCount),
     }
     return pd.DataFrame(data, columns=list(NETWORK_ELEMENT_COLUMNS), dtype=object)

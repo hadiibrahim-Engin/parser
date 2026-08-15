@@ -12,6 +12,12 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from excelToCsv.errors import ConversionError
+from excelToCsv.issues import (
+    SEVERITY_ERROR,
+    Issue,
+    ReportedIssue,
+    writeIssueReport,
+)
 from excelToCsv.loggingSetup import addDebugFileHandler, configureLogging
 from excelToCsv.pipeline import runConversion
 
@@ -80,6 +86,19 @@ def buildParser() -> argparse.ArgumentParser:
         help="Minimum log level for the console (default: INFO).",
     )
     parser.add_argument(
+        "--issue-file",
+        type=Path,
+        default=None,
+        dest="issueFile",
+        metavar="PATH",
+        help=(
+            "Write every error and warning of the run to this file, sorted by Excel row, "
+            "so they can be worked through. A '.csv' target opens straight in Excel next "
+            "to the input; any other suffix gets the same readable blocks as the console. "
+            "Written even when the conversion aborts."
+        ),
+    )
+    parser.add_argument(
         "--debug-file",
         type=Path,
         default=None,
@@ -119,6 +138,33 @@ def resolveSheet(value: str | None) -> str | int | None:
     return stripped
 
 
+def failureIssues(error: ConversionError) -> list[ReportedIssue]:
+    """Findings to report for a failed run.
+
+    Validation failures carry their structured findings. Failures raised outside
+    the collector - a missing input column, an unreadable file - carry none, so
+    the message itself becomes the single reported entry rather than leaving the
+    user with an empty report.
+    """
+    if error.issues:
+        return list(error.issues)  # type: ignore[arg-type]
+    return [(SEVERITY_ERROR, Issue(problem=str(error)))]
+
+
+def writeReport(
+    path: Path | None,
+    issues: list[ReportedIssue],
+    logger: logging.Logger,
+) -> None:
+    """Write the issue report when one was requested; never break the run over it."""
+    if path is None:
+        return
+    try:
+        writeIssueReport(issues, path, logger)
+    except OSError as exc:
+        logger.error("Could not write the issue report to %s: %s", path, exc)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns the exit code."""
     arguments = buildParser().parse_args(argv)
@@ -131,7 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.info("Writing full debug log to: %s", debugPath)
 
     try:
-        runConversion(
+        result = runConversion(
             arguments.input,
             arguments.outputDir,
             logger,
@@ -141,8 +187,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine=arguments.engine,
             headerRow=arguments.headerRow,
         )
-    except ConversionError:
-        # The cause has already been logged in full detail.
+    except ConversionError as exc:
+        # The cause has already been logged in full detail. The report matters
+        # most for exactly this run, so it is written before returning.
+        writeReport(arguments.issueFile, failureIssues(exc), logger)
         return EXIT_CONVERSION_ERROR
     except KeyboardInterrupt:  # pragma: no cover - interactive abort
         logger.critical("Conversion interrupted by user.")
@@ -150,4 +198,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception:
         logger.critical("Unexpected error - conversion aborted.", exc_info=True)
         return EXIT_UNEXPECTED
+
+    writeReport(arguments.issueFile, result.issues, logger)
     return EXIT_SUCCESS
