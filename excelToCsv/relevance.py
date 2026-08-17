@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from excelToCsv.issues import IssueCollector
-from excelToCsv.normalize import collapseWhitespace, parseBoolean
+from excelToCsv.normalize import NOT_RELEVANT_LITERALS, collapseWhitespace, isRelevant
 from excelToCsv.reader import columnValues
 from excelToCsv.schema import KNOWN_INPUT_COLUMNS
 
@@ -45,9 +45,6 @@ _EMPTY_RELEVANCE: Final = ""
 
 #: Value representations that carry no information for the diagnostic.
 _BLANK_REPRESENTATIONS: Final[frozenset[str]] = frozenset({"''", "None", "nan", "' '"})
-
-#: Literals accepted as TRUE, for the diagnostic message.
-_TRUE_DISPLAY: Final[tuple[str, ...]] = ("1", "True", "true", "TRUE")
 
 
 def toJsonList(values: list[str]) -> str:
@@ -144,8 +141,8 @@ def buildRelevantFor(
     Several organisations are written as ``50Hertz;TennetD``, a single one as a
     plain name, and none as an empty field.
 
-    Unrecognized boolean values (e.g. ``maybe``, ``2``) are NOT interpreted as
-    ``True`` but reported as a ``WARNING``.
+    The relevance columns are free-text tick boxes: anything except an explicit
+    zero counts as relevant, see :func:`~excelToCsv.normalize.isRelevant`.
     """
     rowCount = len(frame)
     if rowCount == 0:
@@ -159,30 +156,17 @@ def buildRelevantFor(
         seen: set[str] = set()
         for position, value in enumerate(values):
             seen.add(repr(value))
-            parsed = parseBoolean(value)
-            if parsed is None:
-                collector.warning(
-                    "Unrecognized boolean value - not interpreted as TRUE.",
-                    row=int(rowNumbers[position]),
-                    elementId=elementIds[position],
-                    elementType=elementTypes[position],
-                    field=relevance.column,
-                    value=value,
-                    action="Treating the entry as not relevant and continuing.",
-                )
-                continue
-            flags[position, columnIndex] = parsed
+            flags[position, columnIndex] = isRelevant(value)
 
         meaningful = {value for value in seen if value not in _BLANK_REPRESENTATIONS}
         if not flags[:, columnIndex].any() and meaningful:
-            # The column was recognized and carries values, but none of them counted
-            # as TRUE. Showing what is actually in there turns "it does not work"
-            # into an answer. An entirely blank column is not worth reporting.
-            collector.logger.warning(
-                "Relevance column %r yielded no TRUE value in any row. Accepted as TRUE: "
-                "%s. Values found in this column: %s",
+            # Every marker in this column reads as "not relevant". Legitimate, but
+            # worth recording in the debug log when a column looks unexpectedly empty.
+            collector.logger.debug(
+                "Relevance column %r marks no row as relevant. Not relevant: %s. "
+                "Values found in this column: %s",
                 relevance.column,
-                ", ".join(sorted(_TRUE_DISPLAY)),
+                ", ".join(sorted(NOT_RELEVANT_LITERALS)),
                 ", ".join(sorted(meaningful)[:12]),
             )
 

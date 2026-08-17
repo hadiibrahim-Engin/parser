@@ -452,6 +452,34 @@ def normalizeSingleDate(value: object) -> str:
 _TRUE_LITERALS: Final[frozenset[str]] = frozenset({"1", "true"})
 _FALSE_LITERALS: Final[frozenset[str]] = frozenset({"0", "false"})
 
+#: Markers that mean "not relevant" in a relevance column.
+#:
+#: The relevance columns are free-text in practice: they hold ``1``, ``"1"``,
+#: ``R``, ``l`` or anything else a maintainer used to tick the box. Only an
+#: explicit zero - or an explicit false, which unambiguously means the same -
+#: counts as not relevant.
+NOT_RELEVANT_LITERALS: Final[frozenset[str]] = frozenset({"0", "0.0", "false", "nein", "no"})
+
+
+def isRelevant(value: object) -> bool:
+    """Decide whether a relevance marker counts as relevant.
+
+    Everything except an explicit zero counts as relevant, because the column is
+    a free-text tick box rather than a boolean field. Empty cells are not a
+    marker at all and therefore not relevant.
+
+    ``0``, ``"0"``, ``0.0`` and the unambiguous words ``false`` / ``nein`` /
+    ``no`` mean not relevant; ``1``, ``"1"``, ``R``, ``l``, ``x`` and any other
+    non-empty text mean relevant.
+    """
+    if isBlank(value):
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return float(value) != 0.0
+    return str(value).strip(_WHITESPACE).lower() not in NOT_RELEVANT_LITERALS
+
 
 def parseBoolean(value: object) -> bool | None:
     """Interpret a boolean-like value.

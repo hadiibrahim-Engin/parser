@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from conftest import RecordingHandler, convertRows, elementRow, stationRow
 
 from excelToCsv.loggingSetup import getLogger
@@ -32,18 +33,31 @@ def testRelevantForFromTrueAndFalse(logger: logging.Logger) -> None:
     assert result.stations.iloc[0]["relevant für"] == "50Hertz;TennetD"
 
 
-def testUnknownBooleanValueOnlyWarns(
+@pytest.mark.parametrize("marker", ["1", 1, "R", "l", "x", "X", "ja", "true", "maybe", "2", True])
+def testEveryMarkerExceptZeroCountsAsRelevant(
+    marker: object, logger: logging.Logger
+) -> None:
+    """The column is a free-text tick box, so only an explicit zero opts out."""
+    row = stationRow(**{RELEVANCE_50HERTZ: marker, RELEVANCE_AMPRION: 0})
+    assert convertRows([row], logger).stations.iloc[0]["relevant für"] == "50Hertz"
+
+
+@pytest.mark.parametrize("marker", ["0", 0, 0.0, "0.0", "false", "False", "nein", "", None])
+def testZeroAndBlankAreNotRelevant(marker: object, logger: logging.Logger) -> None:
+    row = stationRow(**{RELEVANCE_50HERTZ: marker, RELEVANCE_AMPRION: "R"})
+    assert convertRows([row], logger).stations.iloc[0]["relevant für"] == "Amprion"
+
+
+def testFreeTextMarkersNeverWarn(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Case 21: an unknown boolean value -> warning, not TRUE."""
-    row = stationRow(**{RELEVANCE_50HERTZ: "maybe", RELEVANCE_AMPRION: 1})
+    """Arbitrary markers are the normal case now - they must not produce noise."""
+    row = stationRow(**{RELEVANCE_50HERTZ: "R", RELEVANCE_AMPRION: "l"})
     result = convertRows([row], logger)
 
-    assert result.stations.iloc[0]["relevant für"] == "Amprion"
-    warnings = logCapture.text(logging.WARNING)
-    assert "Unrecognized boolean value - not interpreted as TRUE." in warnings
-    assert "Value: maybe" in warnings
-    assert f"Field: {RELEVANCE_50HERTZ}" in warnings
+    assert result.stations.iloc[0]["relevant für"] == "50Hertz;Amprion"
+    assert "Unrecognized" not in logCapture.text(logging.WARNING)
+    assert result.warningCount == 0
 
 
 def testEmptyRelevanceProducesAnEmptyField(logger: logging.Logger) -> None:

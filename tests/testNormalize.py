@@ -14,6 +14,7 @@ from excelToCsv.normalize import (
     buildMjapId,
     decimalPlaceCount,
     followsStationIdConvention,
+    isRelevant,
     isVirtualStation,
     normalizeCoordinate,
     normalizeDate,
@@ -385,3 +386,31 @@ def testNormalizeDateHandlesSeveralDates(value: str, expected: str) -> None:
 def testOneBrokenDateInAListIsFatal() -> None:
     with pytest.raises(NormalizationError):
         normalizeDate("2025-05-09;kaputt")
+
+
+# --------------------------------------------------------------------------- #
+# Relevance markers: everything except zero counts
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "value",
+    [1, "1", 1.0, "R", "l", "x", "X", "ja", "yes", "true", "True", True, "maybe", "2", "-1"],
+)
+def testIsRelevantAcceptsAnyMarker(value: object) -> None:
+    """The column is a free-text tick box, not a boolean field."""
+    assert isRelevant(value) is True
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0, "0", 0.0, "0.0", " 0 ", "false", "False", "FALSE", "nein", "no", False],
+)
+def testIsRelevantRejectsExplicitZero(value: object) -> None:
+    assert isRelevant(value) is False
+
+
+@pytest.mark.parametrize("value", ["", "   ", None, float("nan")])
+def testIsRelevantTreatsBlankAsNotRelevant(value: object) -> None:
+    """An empty cell is no marker at all."""
+    assert isRelevant(value) is False

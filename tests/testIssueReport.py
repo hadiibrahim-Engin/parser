@@ -32,10 +32,10 @@ def readReport(path: Path) -> list[dict[str, str]]:
 
 
 def brokenRows() -> list[dict[str, object]]:
-    """One warning (unknown boolean) and one fatal error (dangling reference)."""
+    """One warning (station id convention) and one fatal error (dangling reference)."""
     return [
-        stationRow(**{RELEVANCE: "maybe"}),
-        elementRow(**{"Station 2": "GibtsNicht_380"}),
+        stationRow(**{"ELEMENT ID": "Berlin", RELEVANCE: 1}),
+        elementRow(**{"Station 1": "Berlin", "Station 2": "GibtsNicht_380"}),
     ]
 
 
@@ -87,7 +87,7 @@ def testReportCarriesTheFullRowContext(tmp_path: Path) -> None:
 
 
 def testSuccessfulRunReportsItsWarnings(tmp_path: Path) -> None:
-    rows = [stationRow(**{RELEVANCE: "maybe"})]
+    rows = [stationRow(**{"ELEMENT ID": "Berlin"})]
     inputFile = writeExcel(rows, tmp_path / "input.xlsx")
     report = tmp_path / "issues.csv"
 
@@ -98,7 +98,7 @@ def testSuccessfulRunReportsItsWarnings(tmp_path: Path) -> None:
     assert exitCode == EXIT_SUCCESS
     records = readReport(report)
     assert [record["Severity"] for record in records] == [SEVERITY_WARNING]
-    assert "Unrecognized boolean value" in records[0]["Problem"]
+    assert "does not follow the '<name>_<voltage>' convention" in records[0]["Problem"]
 
 
 def testCleanRunWritesAnEmptyReport(tmp_path: Path) -> None:

@@ -448,10 +448,10 @@ WARNING  relevance.py:128       Tolerable issue.
          Row: 8
          ELEMENT ID: Xb_380
          ELEMENT-TYPE: SUB
-         Field: Interesting/Relevant for (TennetD)
-         Value: maybe
-         Problem: Unrecognized boolean value - not interpreted as TRUE.
-         Action: Treating the entry as not relevant and continuing.
+         Field: Station 2
+         Value: <empty>
+         Problem: Station reference is missing.
+         Action: Writing NaN and continuing.
 
 INFO     networkElements.py:92  Found 3 network element(s).
 ```
@@ -511,7 +511,7 @@ CRITICAL pipeline.py:156        1 error(s) and 9 warning(s). Use --details for e
                                 single finding, --issue-file to export them.
          ERROR       1x  Station reference does not match any station.
          WARNING     5x  Network element has no usable station reference.
-         WARNING     4x  Unrecognized boolean value - not interpreted as TRUE.
+         WARNING     4x  Station reference is missing.
 ```
 
 The findings are grouped by kind, errors first, then by frequency — so the dominant
@@ -816,15 +816,21 @@ parsed is never passed through unchanged.
 Columns whose header contains `Interesting` or `Relevant for` are detected dynamically and
 the organisation name is extracted from the header — preferably from the parentheses.
 
+The columns are **free-text tick boxes**, not boolean fields: in practice they hold `1`,
+`"1"`, `R`, `l`, `x` or whatever the maintainer used to mark a row. The rule is therefore
+**everything except an explicit zero counts as relevant**:
+
 | `50Hertz` | `Amprion` | `TennetD` | Result |
 | --- | --- | --- | --- |
-| `1` | `0` | `True` | `50Hertz;TennetD` |
-| `TRUE` | empty | `false` | `50Hertz` |
+| `1` | `0` | `R` | `50Hertz;TennetD` |
+| `R` | `l` | `0` | `50Hertz;Amprion` |
+| `x` | empty | `0` | `50Hertz` |
 | `0` | `0` | `0` | empty |
-| `maybe` | `1` | `0` | `Amprion` + `WARNING` |
+| empty | empty | empty | empty |
 
-`TRUE`: `1`, `True`, `true`, `TRUE`. `FALSE`: `0`, `False`, `false`, `FALSE`, empty, `NaN`.
-Anything else produces a warning and is **not** treated as true — the converter never guesses.
+Not relevant: `0`, `"0"`, `0.0`, and the unambiguous words `false` / `nein` / `no`.
+An empty cell is no marker at all and counts as not relevant. Everything else — any
+non-empty text — counts as relevant, so arbitrary markers never produce a warning.
 
 `OPC INTERESTING ASSET` contains the word "interesting" but is an explicitly ignored
 business column and is never treated as a relevance column.
@@ -851,7 +857,6 @@ business column and is never treated as a relevance column.
 | Duplicate station `ELEMENT ID` | fatal | All affected rows are listed |
 | Duplicate element id, identical records | warning | Both rows are kept |
 | Duplicate element id, conflicting records | fatal | All affected rows are listed |
-| Unrecognized boolean in a relevance column | warning | Not counted as true |
 | Output column set or order mismatch | fatal | Guards the external contract |
 | Any remaining NA value in the output | fatal | Prevents stray `nan` strings |
 
@@ -919,7 +924,7 @@ Two boundaries keep the change small:
 .venv/bin/python -m pytest
 ```
 
-**321 tests**, including all 25 cases required by the specification.
+**371 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |
