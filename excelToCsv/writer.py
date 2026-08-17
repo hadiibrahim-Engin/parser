@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 from excelToCsv.errors import ConversionError
+from excelToCsv.targetFormat import TargetFormat
 from excelToCsv.schema import (
     DEFAULT_EMPTY_PLACEHOLDER,
     NETWORK_ELEMENTS_FILENAME,
@@ -89,6 +90,7 @@ def writeCsvFiles(
     encoding: str = "utf-8",
     quoteAll: bool = False,
     emptyPlaceholder: str = DEFAULT_EMPTY_PLACEHOLDER,
+    targetFormat: TargetFormat | None = None,
 ) -> tuple[Path, Path]:
     """Write ``Stationen.csv`` and ``Netzelemente.csv``.
 
@@ -101,6 +103,8 @@ def writeCsvFiles(
         quoteAll: ``True`` puts every field in quotes.
         emptyPlaceholder: Filler for columns that are empty in every row, so a
             reader does not type them as numeric. ``""`` keeps them truly empty.
+        targetFormat: Optional column renames and element type translations,
+            applied last so the contract check still sees the canonical names.
 
     Returns:
         The paths of both written files.
@@ -117,6 +121,10 @@ def writeCsvFiles(
 
     stationsPath = outputDir / STATIONS_FILENAME
     networkElementsPath = outputDir / NETWORK_ELEMENTS_FILENAME
+
+    if targetFormat is not None and not targetFormat.isEmpty:
+        stations = targetFormat.applyToStations(stations)
+        networkElements = targetFormat.applyToNetworkElements(networkElements)
 
     stations = fillFullyEmptyColumns(stations, emptyPlaceholder)
     networkElements = fillFullyEmptyColumns(networkElements, emptyPlaceholder)

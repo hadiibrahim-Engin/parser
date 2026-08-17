@@ -46,17 +46,67 @@ def _normalizeDateColumn(
     return values
 
 
+def findElementsWithoutStations(rows: RowSet, context: ConversionContext) -> np.ndarray:
+    """Mark the network elements that carry no usable station reference.
+
+    A network element without the stations it connects cannot be placed in the
+    grid, so it is reported as a ``WARNING`` - it lands in the issue report - and
+    removed from the output instead of being written incomplete.
+
+    Two cases count as "no stations":
+
+    * a mandatory type (LINE/TRA/TIE/DCL) missing either reference,
+    * any other type missing **both** references.
+
+    An optional type that still has one station is kept; the missing side keeps
+    the literal ``NaN`` as before.
+
+    Returns:
+        Boolean mask of the rows to keep.
+    """
+    first = textColumn(rows.frame, COL_STATION_1)
+    second = textColumn(rows.frame, COL_STATION_2)
+
+    keep = np.ones(len(rows), dtype=bool)
+    for position in range(len(rows)):
+        elementType = rows.elementTypes[position]
+        mandatory = elementType in BOTH_STATIONS_REQUIRED
+        missing = [
+            column
+            for column, value in ((COL_STATION_1, first[position]), (COL_STATION_2, second[position]))
+            if not value
+        ]
+        if not missing or (not mandatory and len(missing) < 2):
+            continue
+
+        keep[position] = False
+        context.collector.warning(
+            "Network element has no usable station reference.",
+            field=", ".join(missing),
+            value=None,
+            expected=(
+                f"{elementType} requires {COL_STATION_1} and {COL_STATION_2}."
+                if mandatory
+                else f"{elementType} requires at least one of "
+                f"{COL_STATION_1} / {COL_STATION_2}."
+            ),
+            action="Removing the element from the output and continuing.",
+            **rows.context(position),
+        )
+    return keep
+
+
 def resolveStationReferences(
     rows: RowSet,
     column: str,
     context: ConversionContext,
 ) -> np.ndarray:
-    """Determine the output values of a station reference column.
+    """Determine the raw station reference per row.
 
-    * Mandatory type (LINE/TRA/TIE/DCL) without a reference -> fatal error.
-    * Any other type without a reference -> literal ``NaN`` plus a ``WARNING``.
-    * Existing reference -> taken over unchanged (its existence is checked later
-      in :mod:`excelToCsv.validate`).
+    Rows without a usable reference are already gone at this point; what remains
+    is an optional type that legitimately omits one side, which keeps the literal
+    ``NaN``. The existence of a populated reference is checked later in
+    :mod:`excelToCsv.validate`.
     """
     values = textColumn(rows.frame, column)
     result = np.empty(len(values), dtype=object)
@@ -65,25 +115,15 @@ def resolveStationReferences(
             result[position] = value
             continue
         elementType = rows.elementTypes[position]
-        if elementType in BOTH_STATIONS_REQUIRED:
-            result[position] = ""
-            context.collector.error(
-                "Required station reference is missing.",
-                field=column,
-                value=None,
-                expected=f"{elementType} requires {COL_STATION_1} and {COL_STATION_2}.",
-                **rows.context(position),
-            )
-        else:
-            result[position] = MISSING_STATION_LITERAL
-            context.collector.warning(
-                "Station reference is missing.",
-                field=column,
-                value=None,
-                expected=f"{elementType} may omit a station reference.",
-                action=f"Writing {MISSING_STATION_LITERAL} and continuing.",
-                **rows.context(position),
-            )
+        result[position] = MISSING_STATION_LITERAL
+        context.collector.warning(
+            "Station reference is missing.",
+            field=column,
+            value=None,
+            expected=f"{elementType} may omit one of the two station references.",
+            action=f"Writing {MISSING_STATION_LITERAL} and continuing.",
+            **rows.context(position),
+        )
     return result
 
 
@@ -130,7 +170,12 @@ def convertNetworkElements(
     context: ConversionContext,
     stationMjapByElementId: dict[str, str],
 ) -> pd.DataFrame:
-    """Build the network element records from all valid non-``SUB`` rows."""
+    """Build the network element records.
+
+    Expects ``rows`` to be free of elements without a usable station reference -
+    the pipeline removes those beforehand so the validations that follow see the
+    same set of rows as the output.
+    """
     rowCount = len(rows)
     context.logger.info("Found %d network element(s).", rowCount)
 
@@ -202,8 +247,8 @@ def convertNetworkElements(
         "ABN": _normalizeDateColumn(rows, COL_ENDLIFETIME, "ABN", context),
         "IBN - Mehrfach": emptyColumn(rowCount),
         "ABN - Mehrfach": emptyColumn(rowCount),
-        "Station Anfang": stationStart,
-        "Station Ende": stationEnd,
+        "Station Anfang": stationStartMjap,
+        "Station Ende": stationEndMjap,
         "Station T-1": emptyColumn(rowCount),
         "Station T-2": emptyColumn(rowCount),
         "Y-Knoten-1": multipods,

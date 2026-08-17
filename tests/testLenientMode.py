@@ -92,13 +92,13 @@ def testCleanRunStillExitsZero(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def testMissingMandatoryStationLeavesTheFieldEmpty(logger: logging.Logger) -> None:
+def testMissingMandatoryStationRemovesTheElement(logger: logging.Logger) -> None:
     rows = [*twoStations(), elementRow(**{"Station 2": ""})]
-    element = convertRows(rows, logger, strict=False).networkElements.iloc[0]
+    result = convertRows(rows, logger, strict=False)
 
-    assert element["Station Anfang"] == "Berlin_380"
-    assert element["Station Ende"] == "", "no NaN literal - the value is genuinely missing"
-    assert element["Station Ende:MJAP-ID"] == ""
+    assert len(result.networkElements) == 0, "reported as a warning and dropped"
+    assert result.errorCount == 0, "a missing station is no longer fatal"
+    assert result.warningCount >= 1
 
 
 def testStationWithoutCoordinatesKeepsEmptyCells(logger: logging.Logger) -> None:
@@ -116,12 +116,14 @@ def testUnparsableDateLeavesTheCellEmpty(logger: logging.Logger) -> None:
     assert station["IBN"] == ""
 
 
-def testDanglingReferenceKeepsTheRawValueButNoMjapId(logger: logging.Logger) -> None:
+def testDanglingReferenceResolvesToNothing(logger: logging.Logger) -> None:
+    """The station columns carry MJAP-IDs, so an unresolvable reference stays empty."""
     rows = [*twoStations(), elementRow(**{"Station 2": "GibtsNicht_380"})]
     element = convertRows(rows, logger, strict=False).networkElements.iloc[0]
 
-    assert element["Station Ende"] == "GibtsNicht_380", "the source value is not hidden"
-    assert element["Station Ende:MJAP-ID"] == "", "but it resolves to nothing"
+    assert element["Station Anfang"] == "Amprion_Berlin_380"
+    assert element["Station Ende"] == ""
+    assert element["Station Ende:MJAP-ID"] == ""
 
 
 # --------------------------------------------------------------------------- #

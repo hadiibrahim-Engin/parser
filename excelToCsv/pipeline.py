@@ -20,7 +20,7 @@ import pandas as pd
 
 from excelToCsv.context import ConversionContext, RowSet, subsetRows
 from excelToCsv.issues import IssueCollector, ReportedIssue
-from excelToCsv.networkElements import convertNetworkElements
+from excelToCsv.networkElements import convertNetworkElements, findElementsWithoutStations
 from excelToCsv.normalize import normalizeElementType
 from excelToCsv.reader import (
     DEFAULT_ENGINE,
@@ -50,6 +50,7 @@ from excelToCsv.validate import (
     validateOutputSchema,
     validateStationReferences,
 )
+from excelToCsv.targetFormat import TargetFormat, loadTargetFormat
 from excelToCsv.writer import writeCsvFiles
 
 
@@ -130,6 +131,18 @@ def convertTable(
         zip(stationRows.elementIds, stations["MJAP-ID"].to_numpy(dtype=object), strict=True)
     )
 
+    # Elements without a usable station reference cannot be placed in the grid.
+    # They are reported and removed here, so the validations below and the output
+    # operate on exactly the same set of rows.
+    usable = findElementsWithoutStations(elementRows, context)
+    if not usable.all():
+        logger.warning(
+            "Removing %d network element(s) without a usable station reference from the "
+            "output. They are listed in the issue report.",
+            int((~usable).sum()),
+        )
+        elementRows = subsetRows(elementRows, usable)
+
     networkElements = convertNetworkElements(elementRows, context, stationMjapByElementId)
     validateStationReferences(elementRows, stationIndex, collector)
     validateMultipodReferences(elementRows, stationIndex, collector)
@@ -174,8 +187,10 @@ def runConversion(
     headerRow: int | None = None,
     strict: bool = False,
     emptyPlaceholder: str = DEFAULT_EMPTY_PLACEHOLDER,
+    targetFormatPath: Path | None = None,
 ) -> ConversionResult:
     """Full run: read Excel, convert, validate, write the CSV files."""
+    targetFormat = loadTargetFormat(targetFormatPath, logger)
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
     result = convertTable(table, logger, strict=strict)
     result.stationsPath, result.networkElementsPath = writeCsvFiles(
@@ -186,6 +201,7 @@ def runConversion(
         encoding=encoding,
         quoteAll=quoteAll,
         emptyPlaceholder=emptyPlaceholder,
+        targetFormat=targetFormat,
     )
     logger.info(
         "Conversion finished: %d station(s), %d network element(s), "

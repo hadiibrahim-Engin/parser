@@ -294,3 +294,20 @@ def testStationCountsAreLogged(logger: logging.Logger, logCapture: RecordingHand
     assert "Found 1 station(s)." in info
     assert "Found 1 network element(s)." in info
     assert "Validation successful." in info
+
+
+def testMultipleCommissioningDatesSurvive(logger: logging.Logger) -> None:
+    """IBN/ABN keep the semicolon-separated shape through the whole pipeline."""
+    result = convertRows(
+        [stationRow(**{"STARTLIFETIME": "09.09.1900;02.05.2011",
+                       "ENDLIFETIME": "2030-12-31;2040-01-01"})],
+        logger,
+    )
+    station = result.stations.iloc[0]
+    assert station["IBN"] == "09.09.1900;02.05.2011"
+    assert station["ABN"] == "31.12.2030;01.01.2040"
+
+
+def testDescriptionBecomesKommentar(logger: logging.Logger) -> None:
+    result = convertRows([stationRow(**{"DESCRIPTION": "Grenznahe Anlage"})], logger)
+    assert result.stations.iloc[0]["Kommentar"] == "Grenznahe Anlage"

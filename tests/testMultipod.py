@@ -111,8 +111,8 @@ def testStationColumnsAreUnaffectedByMultipod(logger: logging.Logger) -> None:
     rows = [virtualStation(), *legStations(), leg(1, "StationA_380")]
     element = convertRows(rows, logger).networkElements.iloc[0]
 
-    assert element["Station Anfang"] == VIRTUAL_STATION
-    assert element["Station Ende"] == "StationA_380"
+    assert element["Station Anfang"] == f"50Hertz_{VIRTUAL_STATION}"
+    assert element["Station Ende"] == "Amprion_StationA_380"
     assert element["Station Anfang:MJAP-ID"] == f"50Hertz_{VIRTUAL_STATION}"
     assert element["Station Ende:MJAP-ID"] == "Amprion_StationA_380"
 
@@ -158,9 +158,9 @@ def testThreeLegsStayThreeSeparateRecords(logger: logging.Logger) -> None:
         "Amprion_LINE_003",
     ]
     assert list(elements["Station Ende"]) == [
-        "StationA_380",
-        "StationB_380",
-        "StationC_380",
+        "Amprion_StationA_380",
+        "Amprion_StationB_380",
+        "Amprion_StationC_380",
     ]
     # All three share the same virtual node.
     assert set(elements["Y-Knoten-1"]) == {VIRTUAL_STATION}

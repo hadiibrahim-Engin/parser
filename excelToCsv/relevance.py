@@ -43,6 +43,9 @@ RELEVANCE_SEPARATOR: Final = ";"
 
 _EMPTY_RELEVANCE: Final = ""
 
+#: Literals accepted as TRUE, for the diagnostic message.
+_TRUE_DISPLAY: Final[tuple[str, ...]] = ("1", "True", "true", "TRUE")
+
 
 def toJsonList(values: list[str]) -> str:
     """Serialize a list of values as a compact JSON list (``["a","b"]``).
@@ -111,8 +114,16 @@ def extractRelevanceColumns(
             ", ".join(f"{item.column} -> {item.label}" for item in detected),
         )
     else:
+        candidates = [
+            column
+            for column in columns
+            if collapseWhitespace(str(column)).lower() not in _EXCLUDED_EXACT
+        ]
         logger.warning(
-            "No 'Interesting/Relevant for' column detected - 'relevant für' stays empty."
+            "No 'Interesting/Relevant for' column detected - 'relevant für' stays empty. "
+            "A header must contain 'relevant for' or 'interesting'. Columns present that "
+            "matched nothing: %s",
+            ", ".join(repr(str(column)) for column in candidates) or "(none)",
         )
     return detected
 
@@ -142,7 +153,9 @@ def buildRelevantFor(
     flags = np.zeros((rowCount, len(relevanceColumns)), dtype=bool)
     for columnIndex, relevance in enumerate(relevanceColumns):
         values = columnValues(frame, relevance.column)
+        seen: set[str] = set()
         for position, value in enumerate(values):
+            seen.add(repr(value))
             parsed = parseBoolean(value)
             if parsed is None:
                 collector.warning(
@@ -156,6 +169,17 @@ def buildRelevantFor(
                 )
                 continue
             flags[position, columnIndex] = parsed
+
+        if not flags[:, columnIndex].any():
+            # The column was recognized but nothing in it counted as TRUE. Showing
+            # the values actually present turns "it does not work" into an answer.
+            collector.logger.warning(
+                "Relevance column %r yielded no TRUE value in any row. Accepted as TRUE: "
+                "%s. Values found in this column: %s",
+                relevance.column,
+                ", ".join(sorted(_TRUE_DISPLAY)),
+                ", ".join(sorted(seen)[:12]) or "(none)",
+            )
 
     labels = [item.label for item in relevanceColumns]
     if len(labels) > _MAX_PACKED_COLUMNS:  # pragma: no cover - defensive fallback

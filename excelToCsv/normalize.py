@@ -384,12 +384,34 @@ _DATE_EXPECTATION: Final = (
 )
 
 
-def normalizeDate(value: object) -> str:
-    """Normalize a date to ``DD.MM.YYYY``.
+#: Separator between several dates inside one IBN/ABN field.
+DATE_SEPARATOR: Final = ";"
 
-    An empty source value stays empty. A non-empty value that cannot be
+
+def normalizeDate(value: object) -> str:
+    """Normalize one or several dates to ``DD.MM.YYYY``.
+
+    A field may carry more than one date, separated by ``;`` - for example
+    ``09.09.1900;02.05.2011``. Each part is normalized on its own and the parts
+    are rejoined with the same separator, so the multi-date shape survives.
+
+    An empty source value stays empty. A non-empty part that cannot be
     interpreted reliably is a fatal error.
     """
+    if isBlank(value):
+        return ""
+
+    if isinstance(value, str) and DATE_SEPARATOR in value:
+        parts = [part for part in value.split(DATE_SEPARATOR) if part.strip(_WHITESPACE)]
+        if not parts:
+            return ""
+        return DATE_SEPARATOR.join(normalizeSingleDate(part) for part in parts)
+
+    return normalizeSingleDate(value)
+
+
+def normalizeSingleDate(value: object) -> str:
+    """Normalize exactly one date value to ``DD.MM.YYYY``."""
     if isBlank(value):
         return ""
 

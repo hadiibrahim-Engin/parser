@@ -13,7 +13,7 @@ Three rules drive every design decision:
 
 1. **Never invent a value.** A field without a defined source stays empty.
 2. **Never lose data silently.** Anything unexpected is either a warning or a fatal error.
-3. **Never write a partial result.** Either both files are complete and valid, or neither exists.
+3. **Never write a partial result.** A file is either written completely or not at all.
 
 ---
 
@@ -25,6 +25,7 @@ Three rules drive every design decision:
 - [Finding the header row](#finding-the-header-row)
 - [Classification](#classification)
 - [Multipod](#multipod)
+- [Configurable target format](#configurable-target-format)
 - [Error strategy](#error-strategy)
 - [Logging](#logging)
 - [Module map](#module-map)
@@ -69,6 +70,9 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 | `--header-row N` | 1-based Excel row holding the column headers (default: detected automatically) |
 | `--engine` | `auto` (default), `openpyxl` or `calamine` |
 | `--encoding` | Output encoding (default `utf-8`; use `utf-8-sig` for an Excel-friendly BOM) |
+| `--strict` | Abort on errors and write nothing; by default the files are written anyway |
+| `--target-format FILE` | JSON renaming output columns and translating element types |
+| `--empty-placeholder TEXT` | Filler for columns empty in every row (default: one space) |
 | `--quote-all` | Quote every CSV field instead of only those that require it |
 | `--log-level` | Console minimum level: `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, `CRITICAL` |
 | `--issue-file PATH` | Write every error and warning to a workable list, sorted by Excel row |
@@ -79,8 +83,8 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Success — both CSV files were written |
-| `2` | Fatal validation or I/O error — **no** CSV file was written |
+| `0` | Clean run — both CSV files written, no errors |
+| `2` | Errors occurred. The files are still written unless `--strict` was used |
 | `1` | Unexpected error (bug); a full traceback is logged |
 
 ---
@@ -100,17 +104,22 @@ flowchart TD
     D -->|yes| E["Drop completely empty rows"]
     E --> F["Normalize ELEMENT-TYPE to uppercase"]
     F --> G{"All types known?"}
-    G -->|no| X2["Abort: unknown ELEMENT-TYPE"]
-    G -->|yes| H["Split rows: SUB vs. everything else"]
+    G -->|no, strict| X2["Abort: unknown ELEMENT-TYPE"]
+    G -->|no, default| G2["Report and drop the unclassifiable rows"]
+    G2 --> H["Split rows: SUB vs. everything else"]
+    G -->|yes| H
     H --> I["Build station records: coordinates, dates, voltages"]
     I --> J["Build station index: ELEMENT ID to row"]
     J --> K["Build network element records: references, dates"]
     K --> L["Validate references, duplicates, output schema"]
-    L --> M{"Any fatal error?"}
-    M -->|yes| X3["Abort: nothing is written"]
-    M -->|no| N["Write Stationen.csv and Netzelemente.csv"]
-    N --> O["Exit code 0"]
-    X --> Y["Exit code 2"]
+    L --> M{"Any error?"}
+    M -->|yes, strict| X3["Abort: nothing is written"]
+    M -->|yes, default| N["Write Stationen.csv and Netzelemente.csv"]
+    M -->|no| N
+    N --> P{"Any error?"}
+    P -->|no| O["Exit code 0"]
+    P -->|yes| Y["Exit code 2"]
+    X --> Y
     X2 --> Y
     X3 --> Y
 ```
@@ -118,11 +127,11 @@ flowchart TD
 Why this order matters:
 
 * **Header first** — row numbers in every later message refer to the real Excel row.
-* **Types before splitting** — an unknown `ELEMENT-TYPE` makes the rest meaningless,
-  so it aborts immediately rather than producing half-classified output.
+* **Types before splitting** — a row whose `ELEMENT-TYPE` is unknown cannot be routed to
+  either file, so it is reported and dropped rather than written with a bogus type.
 * **Stations before elements** — the station index must exist before references are
   checked, which makes the result independent of row order in the spreadsheet.
-* **Writing last** — the single most important guarantee of the whole tool.
+* **Writing last** — every value is normalized and checked before a single byte is written.
 
 ---
 
@@ -310,6 +319,39 @@ Bringing the input onto the uniform form happens outside this converter.
 
 ---
 
+## Configurable target format
+
+Output column names and `Element Typ` values are a contract with the consuming system -
+and that contract changes without the converter changing. A JSON file therefore renames
+columns and translates element types, so a rename never needs a code change:
+
+```bash
+python converter.py input.xlsx --target-format targetFormat.json
+```
+
+```json
+{
+  "elementTypes": {"LINE": "Stromkreis", "TRA": "Transformator"},
+  "stationColumns": {"MJAP-ID": "Anlagen-ID"},
+  "networkElementColumns": {"Element Typ": "Betriebsmitteltyp"}
+}
+```
+
+Every key is optional; anything not listed keeps its contract name. `targetFormat.example.json`
+ships a full element-type translation to start from. Keys beginning with `_` are treated as
+comments.
+
+**This affects the target format only.** Input column names are untouched, and so is the
+internal classification: a row with `ELEMENT-TYPE = SUB` still becomes a station even when
+`SUB` is translated for the output. The translation is the last step before writing, so the
+contract check still sees the canonical names.
+
+Guard rails: a rename that would give two columns the same name is rejected outright, and a
+rename pointing at a column that does not exist is reported as a warning rather than failing
+silently.
+
+---
+
 ## Error strategy
 
 ```mermaid
@@ -331,8 +373,38 @@ flowchart TD
 | `DEBUG` | Internal detail (column renames, schema checks, virtual node detection) |
 | `INFO` | Normal progress — file, sheet, header row, counts, results |
 | `WARNING` | Tolerable finding; the conversion continues with a documented fallback |
-| `ERROR` | **Always fatal.** The conversion will abort at the end of the phase |
-| `CRITICAL` | The abort itself, with the error count and the phase that failed |
+| `ERROR` | A real data defect. Reported in full; the affected cell stays empty |
+| `CRITICAL` | The closing summary of a flawed run — or the abort itself under `--strict` |
+
+### Errors do not stop the output
+
+By default an error is **reported, not fatal**: both CSV files are written anyway, and the
+log is the list of things to fix.
+
+```
+CRITICAL Completed WITH 2 error(s) and 3 warning(s). The CSV files are written
+         anyway - fix the errors listed above and rerun.
+INFO     Conversion finished: 3 station(s), 4 network element(s), 2 error(s), 3 warning(s).
+```
+
+The exit code is still `2`, so automation does not mistake a flawed run for a clean one —
+but the files exist and can be inspected.
+
+What a faulty row looks like in the output:
+
+| Defect | Result |
+| --- | --- |
+| Missing mandatory `Station 2` | `Station Ende` empty (no `NaN` literal — the value is genuinely missing) |
+| Reference to a station that does not exist | The raw value is kept, `…:MJAP-ID` stays empty |
+| `SUB` without coordinates | `lat` / `long` empty |
+| Unparsable date | `IBN` / `ABN` empty |
+| Unknown `ELEMENT-TYPE` | **Row dropped** — it cannot be routed to either file; reported and counted |
+
+Two things stay fatal regardless, because they are not data defects:
+a missing required input column and any breach of the output schema itself.
+
+`--strict` restores the original guarantee: the run aborts at the end of the failing
+phase and not a single CSV file comes into existence.
 
 Every finding carries as much context as available:
 
@@ -353,10 +425,9 @@ The specification says to abort on the first fatal error. This implementation co
 **all** errors within a phase, logs each one in full, and aborts at the phase boundary.
 You therefore see every problem in a single run instead of fixing them one at a time.
 
-The hard guarantee is unchanged: **if a single `ERROR` occurred, not one CSV file is
-written.** Both files are first written to temporary files in the target directory and
-only then moved atomically into place, so even an I/O failure cannot leave a half-written
-output behind.
+Both files are first written to temporary files in the target directory and only then
+moved atomically into place, so even an I/O failure cannot leave a half-written output
+behind.
 
 ---
 
@@ -561,8 +632,8 @@ works purely on data and can be tested without an Excel file at all.
 | 9 | `ABN` | `ENDLIFETIME` | `DD.MM.YYYY` |
 | 10 | `IBN - Mehrfach` | — | empty |
 | 11 | `ABN - Mehrfach` | — | empty |
-| 12 | `Station Anfang` | `Station 1` | value, or literal `NaN` when optional and missing |
-| 13 | `Station Ende` | `Station 2` | value, or literal `NaN` when optional and missing |
+| 12 | `Station Anfang` | `Station 1` | **MJAP-ID** of the referenced station, or `NaN` |
+| 13 | `Station Ende` | `Station 2` | **MJAP-ID** of the referenced station, or `NaN` |
 | 14–15 | `Station T-1`, `Station T-2` | — | empty |
 | 16 | `Y-Knoten-1` | `Multipod` | The referenced virtual station, unchanged; empty when `Multipod` is empty |
 | 17 | `Y-Knoten-2` | — | empty (no rule defined yet) |
@@ -573,8 +644,8 @@ works purely on data and can be tested without an Excel file at all.
 | 22 | `ID-OPC` | — | empty |
 | 23 | `ID-UCTE` | `UCTE CODE` | trimmed text |
 | 24 | `ID` | — | empty (no defined source) |
-| 25 | `Station Anfang:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | resolved through the station named by `Station 1` |
-| 26 | `Station Ende:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | resolved through the station named by `Station 2` |
+| 25 | `Station Anfang:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | identical to `Station Anfang` |
+| 26 | `Station Ende:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | identical to `Station Ende` |
 | 27–28 | `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID` | — | empty |
 | 29 | `Y-Knoten-1: MJAP-ID` | `Multipod` | MJAP-ID of the referenced virtual station |
 | 30 | `Y-Knoten-2: MJAP-ID` | — | empty |
@@ -704,6 +775,8 @@ The dominant precision wins; on a tie the higher precision is used so no digit i
 | `2025-05-09 00:00:00` | `09.05.2025` |
 | Excel date cell | `09.05.2025` |
 | Excel serial `45786` | `09.05.2025` |
+| `09.09.1900;02.05.2011` | `09.09.1900;02.05.2011` |
+| `2025-05-09;09/05/2025` | `09.05.2025;09.05.2025` |
 | empty | empty |
 | `irgendwann` | **fatal error** |
 
@@ -775,6 +848,42 @@ Amprion,Amprion_Berlin_380,Umspannwerk Berlin,52.459373,13.361402,"[""380""]",17
 TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 ```
 
+### Columns that are empty in every row
+
+Fifteen output columns have no defined source and therefore stay empty in every row —
+`Region`, `ID`, `IBN - Mehrfach`, `Station T-1`, `Y-Knoten-2` and friends. A column can
+also end up empty by accident, for instance `IBN` in a file where no lifetime dates are
+maintained.
+
+`pandas.read_csv` types such a column as `float64` full of `NaN`, and a reader then gets:
+
+```
+AttributeError: Can only use .str accessor with string values!
+```
+
+To keep the output usable, those columns are written with a **single space** instead of a
+truly empty field. It carries no business meaning, is indistinguishable from empty in a
+spreadsheet, and is enough for pandas to infer a text column:
+
+| Column | Written | `read_csv` dtype | `.str` works |
+| --- | --- | --- | --- |
+| `Region` (never populated) | `" "` | `str` | yes |
+| `MJAP-ID` | `Amprion_LINE_001` | `str` | yes |
+| `IBN` (populated somewhere) | `09.05.2025` / empty | `str` | yes |
+
+Deliberately **not** a business value: filling `IBN - Mehrfach` with something like
+`01.01.1900` would make a downstream consumer generate a real commissioning entry from
+fabricated data.
+
+Two boundaries keep the change small:
+
+* Only columns empty in **every** row are filled. A single missing value in an otherwise
+  populated column stays a genuine gap.
+* The filler is a serialization concern. The in-memory records from `convertTable()` keep
+  their real empty strings — only the file gets the space.
+
+`--empty-placeholder ""` restores truly empty fields.
+
 ---
 
 ## Testing
@@ -783,7 +892,7 @@ TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 .venv/bin/python -m pytest
 ```
 
-**244 tests**, including all 25 cases required by the specification.
+**316 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |
@@ -792,6 +901,9 @@ TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 | `tests/testNetworkElements.py` | LINE/TRA/TIE/DCL (11–15), GEN → `NaN` (16), unknown reference (17), unknown type (18) |
 | `tests/testRelevance.py` | `relevant für` from 0/1 and True/False (19–21), ignored columns |
 | `tests/testOutput.py` | Exact header order (23, 24), no CSVs on fatal error (25), CLI, engine equality |
+| `tests/testTargetFormat.py` | JSON renames and element type translation, guard rails |
+| `tests/testEmptyPlaceholder.py` | All-empty columns stay readable as text, populated columns untouched |
+| `tests/testLenientMode.py` | Errors do not stop the run, dropped unknown types, `--strict` behaviour |
 | `tests/testIssueReport.py` | `--issue-file` on aborted and clean runs, CSV/text formats, row ordering, BOM |
 | `tests/testMultipod.py` | Y nodes from `Multipod`, three legs stay three rows, unknown reference, naming warning, `Map Multipod` irrelevance |
 | `tests/testHeaderDetection.py` | Header in row 5, real Excel row numbers, `--header-row`, missing header |

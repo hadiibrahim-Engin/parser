@@ -38,8 +38,10 @@ def testLineWithTwoValidStations(logger: logging.Logger) -> None:
     assert element["Stromkreisname - Langname"] == "Leitung Berlin - Hamburg"
     assert element["Stromkreisname - Kurzname"] == "Leitung Berlin - Hamburg"
     assert element["Spannung"] == "380"
-    assert element["Station Anfang"] == "Berlin_380"
-    assert element["Station Ende"] == "Hamburg_380"
+    # All four station columns carry the MJAP-ID of the referenced station,
+    # never its name.
+    assert element["Station Anfang"] == "Amprion_Berlin_380"
+    assert element["Station Ende"] == "TennetD_Hamburg_380"
     assert element["Station Anfang:MJAP-ID"] == "Amprion_Berlin_380"
     assert element["Station Ende:MJAP-ID"] == "TennetD_Hamburg_380"
     assert element["ID-UCTE"] == "DLINE471"
@@ -59,22 +61,23 @@ def testLineWithTwoValidStations(logger: logging.Logger) -> None:
         ("DCL", "Station 1"),  # case 15
     ],
 )
-def testMissingMandatoryStationReferenceIsFatal(
+def testMissingMandatoryStationRemovesTheElement(
     elementType: str,
     missingColumn: str,
     logger: logging.Logger,
     logCapture: RecordingHandler,
 ) -> None:
-    """Cases 12-15: mandatory types without a station reference abort."""
+    """Cases 12-15: a mandatory type without a station is reported and dropped."""
     row = elementRow(**{"ELEMENT-TYPE": elementType, missingColumn: ""})
-    with pytest.raises(ConversionError):
-        convertRows([*twoStations(), row], logger)
+    result = convertRows([*twoStations(), row], logger)
 
-    errors = logCapture.text(logging.ERROR)
-    assert "Required station reference is missing." in errors
-    assert f"Field: {missingColumn}" in errors
-    assert f"ELEMENT-TYPE: {elementType}" in errors
-    assert f"Expected: {elementType} requires Station 1 and Station 2." in errors
+    assert len(result.networkElements) == 0, "the element cannot be placed in the grid"
+    warnings = logCapture.text(logging.WARNING)
+    assert "Network element has no usable station reference." in warnings
+    assert f"Field: {missingColumn}" in warnings
+    assert f"ELEMENT-TYPE: {elementType}" in warnings
+    assert f"Expected: {elementType} requires Station 1 and Station 2." in warnings
+    assert "Action: Removing the element from the output and continuing." in warnings
 
 
 def testOptionalStationReferenceBecomesNaN(
@@ -89,7 +92,7 @@ def testOptionalStationReferenceBecomesNaN(
     element = result.networkElements.iloc[0]
     assert element["Station Ende"] == "NaN"
     assert element["Station Ende:MJAP-ID"] == "NaN"
-    assert element["Station Anfang"] == "Berlin_380"
+    assert element["Station Anfang"] == "Amprion_Berlin_380"
 
     warnings = logCapture.text(logging.WARNING)
     assert "Station reference is missing." in warnings
@@ -99,13 +102,27 @@ def testOptionalStationReferenceBecomesNaN(
 
 
 @pytest.mark.parametrize("elementType", ["CAP", "BUB", "GEN", "IND", "LOAD", "PPL", "PROD"])
-def testAllOptionalTypesTolerateMissingStations(
-    elementType: str, logger: logging.Logger
+def testOptionalTypesWithoutAnyStationAreRemoved(
+    elementType: str, logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
+    """No station at all means the element cannot be placed - it is dropped."""
     row = elementRow(**{"ELEMENT-TYPE": elementType, "Station 1": "", "Station 2": ""})
     result = convertRows([*twoStations(), row], logger)
-    element = result.networkElements.iloc[0]
-    assert element["Station Anfang"] == "NaN"
+
+    assert len(result.networkElements) == 0
+    assert "Network element has no usable station reference." in logCapture.text(logging.WARNING)
+
+
+@pytest.mark.parametrize("elementType", ["CAP", "BUB", "GEN", "IND", "LOAD", "PPL", "PROD"])
+def testOptionalTypesKeepOneSidedElements(
+    elementType: str, logger: logging.Logger
+) -> None:
+    """One station is enough; the missing side keeps the NaN literal."""
+    row = elementRow(
+        **{"ELEMENT-TYPE": elementType, "Station 1": "Berlin_380", "Station 2": ""}
+    )
+    element = convertRows([*twoStations(), row], logger).networkElements.iloc[0]
+    assert element["Station Anfang"] == "Amprion_Berlin_380"
     assert element["Station Ende"] == "NaN"
 
 
@@ -193,4 +210,4 @@ def testConflictingDuplicateElementsAreFatal(logger: logging.Logger) -> None:
 def testNetworkElementsResolveStationsRegardlessOfRowOrder(logger: logging.Logger) -> None:
     """Stations may appear after the network elements in the spreadsheet."""
     result = convertRows([elementRow(), *twoStations()], logger)
-    assert result.networkElements.iloc[0]["Station Anfang"] == "Berlin_380"
+    assert result.networkElements.iloc[0]["Station Anfang"] == "Amprion_Berlin_380"

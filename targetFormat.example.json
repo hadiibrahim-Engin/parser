@@ -1,0 +1,21 @@
+{
+  "_comment": "Renames the TARGET format only. Input column names are untouched. Pass with --target-format. Every key is optional; anything not listed keeps its contract name.",
+
+  "elementTypes": {
+    "LINE": "Stromkreis",
+    "TRA": "Transformator",
+    "TIE": "Kuppelleitung",
+    "DCL": "HGUE-Strecke",
+    "CAP": "Kompensationsanlage",
+    "BUB": "Sammelschiene",
+    "GEN": "Generator",
+    "IND": "Industrieanschluss",
+    "LOAD": "Last",
+    "PPL": "Kraftwerk",
+    "PROD": "Erzeugungseinheit"
+  },
+
+  "stationColumns": {},
+
+  "networkElementColumns": {}
+}

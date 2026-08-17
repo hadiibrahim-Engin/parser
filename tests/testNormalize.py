@@ -359,3 +359,29 @@ def testIsVirtualStationDetectsXNodes(elementId: str) -> None:
 @pytest.mark.parametrize("elementId", ["Berlin_380", "HRA_380", "aX_380"])
 def testIsVirtualStationIgnoresRealStations(elementId: str) -> None:
     assert isVirtualStation(elementId) is False
+
+
+# --------------------------------------------------------------------------- #
+# Several dates in one field
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("09.09.1900;02.05.2011", "09.09.1900;02.05.2011"),
+        ("2025-05-09;09/05/2025", "09.05.2025;09.05.2025"),
+        ("09.09.1900; 02.05.2011 ", "09.09.1900;02.05.2011"),
+        ("2025-05-09;2026-01-31;2027-12-01", "09.05.2025;31.01.2026;01.12.2027"),
+        ("09.05.2025;", "09.05.2025"),
+        (";;", ""),
+    ],
+)
+def testNormalizeDateHandlesSeveralDates(value: str, expected: str) -> None:
+    """IBN/ABN may carry more than one date, separated by a semicolon."""
+    assert normalizeDate(value) == expected
+
+
+def testOneBrokenDateInAListIsFatal() -> None:
+    with pytest.raises(NormalizationError):
+        normalizeDate("2025-05-09;kaputt")

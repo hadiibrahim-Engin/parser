@@ -108,15 +108,19 @@ def testWrittenCsvContentIsClean(tmp_path: Path, logger: logging.Logger) -> None
     assert len(elementRecords) == 1
     assert records[0]["MJAP-ID"] == "Amprion_Berlin_380"
     assert elementRecords[0]["MJAP-ID"] == "Amprion_LINE_471"
-    assert elementRecords[0]["Station Anfang"] == "Berlin_380"
+    assert elementRecords[0]["Station Anfang"] == "Amprion_Berlin_380"
     assert elementRecords[0]["Station Anfang:MJAP-ID"] == "Amprion_Berlin_380"
     assert elementRecords[0]["Station Ende:MJAP-ID"] == "Amprion_Hamburg_380"
-    assert elementRecords[0]["Region"] == ""
+    # Region has no source at all, so the whole column carries the placeholder
+    # that keeps pandas from typing it as numeric NaN on the way back in.
+    assert elementRecords[0]["Region"] == " "
+    assert elementRecords[0]["Region"].strip() == ""
 
 
 def testNoCsvFilesOnFatalError(tmp_path: Path, logger: logging.Logger) -> None:
     """Case 25: in strict mode a fatal error creates not a single CSV file."""
-    rows = [*sampleRows(), elementRow(**{"ELEMENT ID": "LINE_9", "Station 2": ""})]
+    # A dangling reference is still fatal; a missing one is only a warning now.
+    rows = [*sampleRows(), elementRow(**{"ELEMENT ID": "LINE_9", "Station 2": "GibtsNicht_380"})]
     inputFile = writeExcel(rows, tmp_path / "input.xlsx")
     outputDir = tmp_path / "out"
 
@@ -149,7 +153,7 @@ def testCliReturnsZeroOnSuccess(
 
 def testCliReturnsNonZeroOnFatalError(tmp_path: Path) -> None:
     """--strict keeps the original guarantee: no output at all."""
-    rows = [*sampleRows(), elementRow(**{"ELEMENT ID": "LINE_9", "Station 1": ""})]
+    rows = [*sampleRows(), elementRow(**{"ELEMENT ID": "LINE_9", "Station 1": "GibtsNicht_380"})]
     inputFile = writeExcel(rows, tmp_path / "input.xlsx")
     exitCode = main(
         [str(inputFile), "--output-dir", str(tmp_path / "out"), "--strict", "--no-color"]

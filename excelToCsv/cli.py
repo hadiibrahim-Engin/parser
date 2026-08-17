@@ -87,6 +87,18 @@ def buildParser() -> argparse.ArgumentParser:
         help="Minimum log level for the console (default: INFO).",
     )
     parser.add_argument(
+        "--target-format",
+        type=Path,
+        default=None,
+        dest="targetFormatPath",
+        metavar="FILE",
+        help=(
+            "JSON file renaming output columns and translating ELEMENT-TYPE values "
+            "(e.g. LINE -> Stromkreis). Affects the target format only; input column "
+            "names stay untouched. See targetFormat.example.json."
+        ),
+    )
+    parser.add_argument(
         "--empty-placeholder",
         default=DEFAULT_EMPTY_PLACEHOLDER,
         dest="emptyPlaceholder",
@@ -208,6 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             headerRow=arguments.headerRow,
             strict=arguments.strict,
             emptyPlaceholder=arguments.emptyPlaceholder,
+            targetFormatPath=arguments.targetFormatPath,
         )
     except ConversionError as exc:
         # The cause has already been logged in full detail. The report matters
