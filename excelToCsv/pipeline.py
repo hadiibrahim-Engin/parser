@@ -153,17 +153,7 @@ def convertTable(
     validateOutputSchema(stations, STATION_COLUMNS, STATIONS_FILENAME, context)
     validateOutputSchema(networkElements, NETWORK_ELEMENT_COLUMNS, NETWORK_ELEMENTS_FILENAME, context)
 
-    if collector.failed:
-        logger.critical(
-            "Completed WITH %d error(s) and %d warning(s). The CSV files are written "
-            "anyway - fix the errors listed above and rerun.",
-            len(collector.errors),
-            len(collector.warnings),
-        )
-    elif collector.warnings:
-        logger.info("Validation successful with %d warning(s).", len(collector.warnings))
-    else:
-        logger.info("Validation successful.")
+    collector.logSummary()
 
     return ConversionResult(
         stations=stations,

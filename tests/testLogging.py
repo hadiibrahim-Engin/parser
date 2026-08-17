@@ -220,3 +220,93 @@ def testDebugFileViaCli(tmp_path: Path) -> None:
     content = debugFile.read_text(encoding="utf-8")
     assert "DEBUG" in content
     assert "Reading input file" in content, "file has INFO detail even though console is WARNING"
+
+
+# --------------------------------------------------------------------------- #
+# Console default: summary instead of every single finding
+# --------------------------------------------------------------------------- #
+
+
+def testDetailBlocksGoToTheFindingsLogger(
+    logger: logging.Logger, logCapture: RecordingHandler
+) -> None:
+    """Details keep a separate logger name so the console can filter them out."""
+    from excelToCsv.loggingSetup import FINDINGS_LOGGER_NAME
+
+    convertRows(
+        [
+            stationRow(),
+            elementRow(**{"ELEMENT-TYPE": "GEN", "Station 1": "Berlin_380", "Station 2": ""}),
+        ],
+        logger,
+    )
+
+    detailRecords = [
+        record for record in logCapture.records if record.name.startswith(FINDINGS_LOGGER_NAME)
+    ]
+    assert detailRecords, "the per-finding blocks still exist"
+    assert any("Station reference is missing." in record.getMessage() for record in detailRecords)
+
+
+def testConsoleHidesTheDetailBlocksByDefault(tmp_path: Path, capsys) -> None:
+    """A default run prints the summary, not one block per finding."""
+    import conftest
+
+    from excelToCsv.cli import main
+
+    rows = [
+        stationRow(),
+        *[
+            elementRow(**{"ELEMENT ID": f"LINE_{index}", "Station 1": "Berlin_380",
+                          "Station 2": ""})
+            for index in range(4)
+        ],
+    ]
+    inputFile = conftest.writeExcel(rows, tmp_path / "input.xlsx")
+
+    main([str(inputFile), "-o", str(tmp_path / "out"), "--no-color"])
+    quiet = capsys.readouterr().err
+
+    assert "4x  Network element has no usable station reference." in quiet
+    assert "Action: Removing the element" not in quiet, "no per-finding block"
+    assert "--details" in quiet, "the summary says how to get them"
+
+    main([str(inputFile), "-o", str(tmp_path / "out2"), "--details", "--no-color"])
+    verbose = capsys.readouterr().err
+
+    assert "Action: Removing the element" in verbose
+    assert len(verbose.splitlines()) > len(quiet.splitlines())
+
+
+def testSummaryGroupsByKindAndSeverity(logger: logging.Logger) -> None:
+    from excelToCsv.issues import SEVERITY_ERROR, SEVERITY_WARNING, Issue, IssueCollector
+
+    collector = IssueCollector(logger=logger)
+    collector.warnings.extend([Issue(problem="w"), Issue(problem="w"), Issue(problem="other")])
+    collector.errors.append(Issue(problem="boom"))
+
+    lines = collector.summaryLines()
+    assert lines[0] == f"{SEVERITY_ERROR:<7}     1x  boom", "errors first"
+    assert f"{SEVERITY_WARNING:<7}     2x  w" in lines[1], "most frequent warning next"
+    assert len(lines) == 3
+
+
+def testCleanRunSaysSo(logger: logging.Logger, logCapture: RecordingHandler) -> None:
+    convertRows([stationRow()], logger)
+    assert "Validation successful - no findings." in logCapture.text(logging.INFO)
+
+
+def testDebugFileKeepsTheDetailsEvenWithoutDetailsFlag(tmp_path: Path) -> None:
+    """--details controls the console only; the files always get everything."""
+    import conftest
+
+    from excelToCsv.cli import main
+
+    rows = [stationRow(), elementRow(**{"Station 1": "Berlin_380", "Station 2": ""})]
+    inputFile = conftest.writeExcel(rows, tmp_path / "input.xlsx")
+    debug = tmp_path / "debug.log"
+
+    main([str(inputFile), "-o", str(tmp_path / "out"), "--debug-file", str(debug), "--no-color"])
+
+    content = debug.read_text(encoding="utf-8")
+    assert "Action: Removing the element from the output and continuing." in content

@@ -293,7 +293,7 @@ def testStationCountsAreLogged(logger: logging.Logger, logCapture: RecordingHand
     info = logCapture.text(logging.INFO)
     assert "Found 1 station(s)." in info
     assert "Found 1 network element(s)." in info
-    assert "Validation successful." in info
+    assert "Validation successful - no findings." in info
 
 
 def testMultipleCommissioningDatesSurvive(logger: logging.Logger) -> None:

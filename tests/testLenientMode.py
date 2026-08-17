@@ -55,8 +55,9 @@ def testFinalSummaryNamesTheErrorCount(
     convertRows(rows, logger, strict=False)
 
     critical = logCapture.text(logging.CRITICAL)
-    assert "Completed WITH 1 error(s)" in critical
-    assert "written anyway" in critical
+    assert "1 error(s) and" in critical
+    assert "--details" in critical, "the summary points at the detailed view"
+    assert "Station reference does not match any station." in critical
 
 
 def testCsvFilesAreWrittenDespiteErrors(tmp_path: Path, logger: logging.Logger) -> None:

@@ -110,6 +110,15 @@ def buildParser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--details",
+        action="store_true",
+        dest="showDetails",
+        help=(
+            "Print every single finding on the console instead of only the grouped "
+            "summary. The details always reach --issue-file and --debug-file regardless."
+        ),
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help=(
@@ -203,6 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger = configureLogging(
         level=getattr(logging, arguments.logLevel),
         color=arguments.color,
+        showDetails=arguments.showDetails,
     )
     if arguments.debugFile is not None:
         debugPath = addDebugFileHandler(logger, arguments.debugFile)

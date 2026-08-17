@@ -75,6 +75,7 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 | `--empty-placeholder TEXT` | Filler for columns empty in every row (default: one space) |
 | `--quote-all` | Quote every CSV field instead of only those that require it |
 | `--log-level` | Console minimum level: `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, `CRITICAL` |
+| `--details` | Print every single finding on the console instead of only the summary |
 | `--issue-file PATH` | Write every error and warning to a workable list, sorted by Excel row |
 | `--debug-file PATH` | Also write a full `DEBUG`-level log to this file, independent of `--log-level` |
 | `--color` / `--no-color` | Force or disable colored log output |
@@ -494,6 +495,32 @@ file, which proves the run was checked rather than skipped.
 `--issue-file` and `--debug-file` are independent and can be combined: the first is the
 short list of things to fix, the second the full trace of what happened.
 
+### The console stays readable
+
+By default the console shows **progress plus a grouped summary** — not one block per
+finding. A file with hundreds of small defects would otherwise scroll the useful
+information off the screen:
+
+```
+INFO     stations.py:184        Found 8 station(s).
+WARNING  pipeline.py:139        Removing 5 network element(s) without a usable station
+                                reference from the output.
+INFO     networkElements.py:180 Found 1 network element(s).
+
+CRITICAL pipeline.py:156        1 error(s) and 9 warning(s). Use --details for every
+                                single finding, --issue-file to export them.
+         ERROR       1x  Station reference does not match any station.
+         WARNING     5x  Network element has no usable station reference.
+         WARNING     4x  Unrecognized boolean value - not interpreted as TRUE.
+```
+
+The findings are grouped by kind, errors first, then by frequency — so the dominant
+problem is the first thing you read. On the sample above this is 19 lines instead of 115.
+
+`--details` prints every individual block on the console as well. The detail blocks are
+logged to a separate child logger which only the **console handler** filters, so
+`--issue-file` and `--debug-file` always receive everything regardless of the flag.
+
 ### Capturing a full debug log
 
 `--log-level` controls what the console shows. Independently, `--debug-file PATH` writes
@@ -892,7 +919,7 @@ Two boundaries keep the change small:
 .venv/bin/python -m pytest
 ```
 
-**316 tests**, including all 25 cases required by the specification.
+**321 tests**, including all 25 cases required by the specification.
 
 | File | Covers |
 | --- | --- |

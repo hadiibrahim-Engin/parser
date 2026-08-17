@@ -25,6 +25,10 @@ from typing import Final
 
 LOGGER_NAME: Final = "excelToCsv"
 
+#: Child logger carrying the per-finding detail blocks. The console hides it
+#: unless details were requested; file handlers always receive it in full.
+FINDINGS_LOGGER_NAME: Final = f"{LOGGER_NAME}.findings"
+
 #: Width of the source location (``reader.py:120``) inside the log line.
 LOCATION_WIDTH: Final = 22
 
@@ -119,6 +123,18 @@ class BlockFormatter(logging.Formatter):
         return f"{leading}{body}\n"
 
 
+class SuppressFindingsFilter(logging.Filter):
+    """Keep the per-finding detail blocks off the console.
+
+    Hundreds of multi-line blocks make a real run unreadable, so by default the
+    console shows progress plus a grouped summary and the details go to
+    ``--issue-file`` / ``--debug-file``. ``--details`` removes this filter.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.name.startswith(FINDINGS_LOGGER_NAME)
+
+
 def supportsColor(stream: object) -> bool:
     """Check whether ANSI colors make sense on this stream."""
     if os.environ.get("NO_COLOR"):
@@ -131,12 +147,19 @@ def buildFormatter(useColor: bool) -> logging.Formatter:
     return BlockFormatter(buildColorizer(useColor))
 
 
-def configureLogging(level: int = logging.INFO, color: bool | None = None) -> logging.Logger:
+def configureLogging(
+    level: int = logging.INFO,
+    color: bool | None = None,
+    showDetails: bool = False,
+) -> logging.Logger:
     """Configure the converter logger and return it.
 
     Args:
         level: Minimum log level.
         color: ``True``/``False`` forces colors; ``None`` decides by TTY.
+        showDetails: ``True`` also prints every per-finding block on the console.
+            By default the console shows progress plus the closing summary, and
+            the details go to ``--issue-file`` / ``--debug-file``.
     """
     stream = sys.stderr
     useColor = supportsColor(stream) if color is None else color
@@ -150,6 +173,8 @@ def configureLogging(level: int = logging.INFO, color: bool | None = None) -> lo
     handler = logging.StreamHandler(stream)
     handler.setLevel(level)
     handler.setFormatter(buildFormatter(useColor))
+    if not showDetails:
+        handler.addFilter(SuppressFindingsFilter())
     logger.addHandler(handler)
     return logger
 
@@ -174,6 +199,11 @@ def addDebugFileHandler(logger: logging.Logger, path: Path) -> Path:
     if logger.level > logging.DEBUG:
         logger.setLevel(logging.DEBUG)
     return path.resolve()
+
+
+def findingsLogger(logger: logging.Logger) -> logging.Logger:
+    """Child logger for the detail blocks belonging to ``logger``."""
+    return logging.getLogger(f"{logger.name}.findings")
 
 
 def getLogger(name: str | None = None) -> logging.Logger:

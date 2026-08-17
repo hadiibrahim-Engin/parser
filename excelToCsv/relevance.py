@@ -43,6 +43,9 @@ RELEVANCE_SEPARATOR: Final = ";"
 
 _EMPTY_RELEVANCE: Final = ""
 
+#: Value representations that carry no information for the diagnostic.
+_BLANK_REPRESENTATIONS: Final[frozenset[str]] = frozenset({"''", "None", "nan", "' '"})
+
 #: Literals accepted as TRUE, for the diagnostic message.
 _TRUE_DISPLAY: Final[tuple[str, ...]] = ("1", "True", "true", "TRUE")
 
@@ -170,15 +173,17 @@ def buildRelevantFor(
                 continue
             flags[position, columnIndex] = parsed
 
-        if not flags[:, columnIndex].any():
-            # The column was recognized but nothing in it counted as TRUE. Showing
-            # the values actually present turns "it does not work" into an answer.
+        meaningful = {value for value in seen if value not in _BLANK_REPRESENTATIONS}
+        if not flags[:, columnIndex].any() and meaningful:
+            # The column was recognized and carries values, but none of them counted
+            # as TRUE. Showing what is actually in there turns "it does not work"
+            # into an answer. An entirely blank column is not worth reporting.
             collector.logger.warning(
                 "Relevance column %r yielded no TRUE value in any row. Accepted as TRUE: "
                 "%s. Values found in this column: %s",
                 relevance.column,
                 ", ".join(sorted(_TRUE_DISPLAY)),
-                ", ".join(sorted(seen)[:12]) or "(none)",
+                ", ".join(sorted(meaningful)[:12]),
             )
 
     labels = [item.label for item in relevanceColumns]

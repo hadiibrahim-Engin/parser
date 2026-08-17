@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Final
 
 from excelToCsv.errors import ConversionError
+from excelToCsv.loggingSetup import findingsLogger
 
 #: How an empty value is rendered in log messages.
 EMPTY_DISPLAY = "<empty>"
@@ -175,6 +176,7 @@ class IssueCollector:
     """
 
     logger: logging.Logger
+    details: logging.Logger | None = None
     errors: list[Issue] = field(default_factory=list)
     warnings: list[Issue] = field(default_factory=list)
     maxLoggedErrors: int = 200
@@ -189,9 +191,9 @@ class IssueCollector:
         issue = Issue(problem=problem, **context)  # type: ignore[arg-type]
         self.errors.append(issue)
         if len(self.errors) <= self.maxLoggedErrors:
-            self.logger.error(issue.render("Validation failed."), stacklevel=2)
+            self.detailLogger.error(issue.render("Validation failed."), stacklevel=2)
         elif len(self.errors) == self.maxLoggedErrors + 1:
-            self.logger.error(
+            self.detailLogger.error(
                 "Further errors are suppressed after %d entries.",
                 self.maxLoggedErrors,
                 stacklevel=2,
@@ -201,7 +203,48 @@ class IssueCollector:
         """Record a tolerable finding and log it immediately."""
         issue = Issue(problem=problem, **context)  # type: ignore[arg-type]
         self.warnings.append(issue)
-        self.logger.warning(issue.render("Tolerable issue."), stacklevel=2)
+        self.detailLogger.warning(issue.render("Tolerable issue."), stacklevel=2)
+
+    @property
+    def detailLogger(self) -> logging.Logger:
+        """Logger carrying the per-finding blocks; the console can filter it out."""
+        if self.details is None:
+            self.details = findingsLogger(self.logger)
+        return self.details
+
+    def summaryLines(self) -> list[str]:
+        """Group the findings by kind, most severe and most frequent first.
+
+        The console shows this instead of hundreds of individual blocks, so a
+        run stays readable while still naming what actually went wrong.
+        """
+        counts: dict[tuple[str, str], int] = {}
+        for severity, issue in self.allIssues():
+            key = (severity, issue.problem)
+            counts[key] = counts.get(key, 0) + 1
+
+        order = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1}
+        ranked = sorted(counts.items(), key=lambda item: (order[item[0][0]], -item[1]))
+        return [
+            f"{severity:<7} {count:>5}x  {problem}"
+            for (severity, problem), count in ranked
+        ]
+
+    def logSummary(self) -> None:
+        """Log the closing summary at a level matching the worst finding."""
+        if not self.errors and not self.warnings:
+            self.logger.info("Validation successful - no findings.", stacklevel=2)
+            return
+
+        headline = (
+            f"{len(self.errors)} error(s) and {len(self.warnings)} warning(s). "
+            f"Use --details for every single finding, --issue-file to export them."
+        )
+        block = "\n".join([headline, *self.summaryLines()])
+        if self.errors:
+            self.logger.critical(block, stacklevel=2)
+        else:
+            self.logger.warning(block, stacklevel=2)
 
     @property
     def failed(self) -> bool:
