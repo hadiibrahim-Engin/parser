@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph P2P
+    A1[Anfang] --- E1[Ende]
+  end
+  subgraph Y
+    A2[Anfang] --- Y1[Y1]
+    E2[Ende] --- Y1
+    T1[T1] --- Y1
+  end
+  subgraph DoppelY
+    A3[Anfang] --- Y3[Y1]
+    T3[T1] --- Y3
+    Y3 --- Y4[Y2]
+    Y4 --- T4[T2]
+    Y4 --- E3[Ende]
+  end

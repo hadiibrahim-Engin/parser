@@ -1,0 +1,117 @@
+{
+  "scenario": "populated",
+  "qgis": "3.40.3-Bratislava",
+  "pandas": "2.2.3",
+  "messages": [
+    [
+      "success",
+      "Erfolg",
+      "Konvertierung von Sharepoint Daten abgeschlossen."
+    ]
+  ],
+  "warnings": [
+    "Could not infer format, so each element will be parsed individually, falling back to `dateutil`. To ensure parsing is consistent and as-expected, please specify a format."
+  ],
+  "layers": {
+    "Standorte": {
+      "count": 2,
+      "fields": [
+        "id",
+        "Attribute_IBN",
+        "Attribute_ABN",
+        "Attribute_Eigentümer",
+        "Attribute_Spannung",
+        "Attribute_Stationsname - Langname",
+        "Attribute_reales UW",
+        "Attribute_ID-OPC"
+      ]
+    },
+    "Stromkreise": {
+      "count": 2,
+      "fields": [
+        "schlüssel",
+        "von",
+        "nach",
+        "Attribute_shape-ID",
+        "Attribute_IBN",
+        "Attribute_ABN",
+        "Attribute_Eigentümer",
+        "Attribute_Spannung",
+        "Attribute_Stromkreisname - Langname",
+        "Attribute_Element Typ",
+        "Attribute_relevant für",
+        "Attribute_ID-OPC",
+        "Attribute_Region"
+      ]
+    },
+    "Standorte Schaltungen": {
+      "count": 1,
+      "fields": [
+        "fid",
+        "MJAP-ID_Schaltung",
+        "MJAP-ID_x",
+        "Element Typ",
+        "Standort_von",
+        "MJAP-ID_y",
+        "interne ID",
+        "von",
+        "bis",
+        "Projekt",
+        "Maßnahme",
+        "Schaltungsart",
+        "Schaltung"
+      ]
+    },
+    "Stromkreise Schaltungen": {
+      "count": 1,
+      "fields": [
+        "fid",
+        "MJAP-ID_Schaltung",
+        "MJAP-ID_x",
+        "Element Typ",
+        "Standort_von",
+        "MJAP-ID_y",
+        "interne ID",
+        "von",
+        "bis",
+        "Projekt",
+        "Maßnahme",
+        "Schaltungsart",
+        "Schaltung"
+      ]
+    },
+    "Standorte Projekte": {
+      "count": 1,
+      "fields": [
+        "fid",
+        "Projektname",
+        "betroffener Standort",
+        "Umsetzungzeitraum von",
+        "Umsetzungzeitraum bis"
+      ]
+    },
+    "Stromkreise Projekte": {
+      "count": 1,
+      "fields": [
+        "fid",
+        "MJAP-ID_Schaltung",
+        "MJAP-ID_x",
+        "Element Typ",
+        "Standort_von",
+        "MJAP-ID_y",
+        "interne ID",
+        "von",
+        "bis",
+        "Projekt",
+        "Maßnahme",
+        "Schaltungsart",
+        "Schaltung",
+        "Standorte Projekte_fid",
+        "Standorte Projekte_betroffener Standort",
+        "Standorte Projekte_Umsetzungzeitraum von",
+        "Standorte Projekte_Umsetzungzeitraum bis"
+      ]
+    }
+  },
+  "expression_errors": []
+}

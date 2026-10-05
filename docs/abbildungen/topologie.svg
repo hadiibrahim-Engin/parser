@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 700" role="img">
+<title>Topologie: direkte MJAP-Zeilen und einzeln gelieferte Parser-Beine</title>
+<rect width="1400" height="700" fill="#f5f8fa" rx="18"/>
+<g font-family="Arial, sans-serif" fill="#173340">
+<text x="32" y="36" font-size="24" font-weight="700" fill="#173340" text-anchor="start">Topologie: direkte MJAP-Zeilen und einzeln gelieferte Parser-Beine</text>
+<rect x="30" y="80" width="390" height="85" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="48" y="109" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Punkt zu Punkt</text>
+<text x="48" y="137" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Anfang + Ende → eine Linie</text>
+<rect x="470" y="80" width="450" height="85" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="488" y="109" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Zusammengefasste Y-Zeile</text>
+<text x="488" y="137" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Anfang + Ende + T1 + Y1 → 3 Legs</text>
+<rect x="960" y="80" width="410" height="85" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="978" y="109" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Zusammengefasste Doppel-Y</text>
+<text x="978" y="137" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Anfang + Ende + T1/T2 + Y1/Y2</text>
+<path d="M90 285 L355 285" stroke="#335566" stroke-width="2.4" fill="none"/>
+<circle cx="90" cy="285" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="90" y="291" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">A</text>
+<circle cx="355" cy="285" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="355" y="291" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">E</text>
+<path d="M540 230 L695 320" stroke="#335566" stroke-width="2.4" fill="none"/>
+<path d="M845 230 L695 320" stroke="#335566" stroke-width="2.4" fill="none"/>
+<path d="M695 420 L695 320" stroke="#335566" stroke-width="2.4" fill="none"/>
+<circle cx="540" cy="230" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="540" y="236" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">A</text>
+<circle cx="845" cy="230" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="845" y="236" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">E</text>
+<circle cx="695" cy="420" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="695" y="426" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">T1</text>
+<circle cx="695" cy="320" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="695" y="326" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">Y1</text>
+<path d="M995 240 L1100 320" stroke="#335566" stroke-width="2.4" fill="none"/>
+<path d="M1045 420 L1100 320" stroke="#335566" stroke-width="2.4" fill="none"/>
+<path d="M1100 320 L1240 320" stroke="#335566" stroke-width="2.4" fill="none"/>
+<path d="M1240 320 L1295 420" stroke="#335566" stroke-width="2.4" fill="none"/>
+<path d="M1240 320 L1340 240" stroke="#335566" stroke-width="2.4" fill="none"/>
+<circle cx="995" cy="240" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="995" y="246" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">A</text>
+<circle cx="1045" cy="420" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="1045" y="426" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">T1</text>
+<circle cx="1100" cy="320" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="1100" y="326" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">Y1</text>
+<circle cx="1240" cy="320" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="1240" y="326" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">Y2</text>
+<circle cx="1295" cy="420" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="1295" y="426" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">T2</text>
+<circle cx="1340" cy="240" r="27" fill="#ffffff" stroke="#117c77" stroke-width="3"/>
+<text x="1340" y="246" font-size="17" font-weight="700" fill="#173340" text-anchor="middle">E</text>
+<text x="1090" y="482" font-size="19" font-weight="700" fill="#173340" text-anchor="start">5 Legs</text>
+<rect x="30" y="545" width="1340" height="115" rx="12" fill="#fff0d9" stroke="#aac1c8"/>
+<text x="48" y="574" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Der aktuelle Parser liefert Multipods bereits als einzelne P2P-Beine</text>
+<text x="48" y="602" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Multipod benennt zusätzlich den gemeinsamen virtuellen SUB-Knoten. T1/T2 bleiben leer.</text>
+<text x="48" y="626" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Nicht automatisch mehrere Excel-Zeilen zu einer neuen Y-Sammelzeile zusammenfassen.</text>
+</g></svg>

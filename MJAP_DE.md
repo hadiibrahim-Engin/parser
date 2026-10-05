@@ -1,5 +1,11 @@
 # MJAP-kompatible CSVs und zusätzliche Länderkarten
 
+Das vollständige [Datenhandbuch](docs/DATENFLUSS_UND_TABELLEN_DE.md) erklärt den
+Ablauf, alle Felder mit Datentypen, Pflicht-/Leerwertregeln, vier Diagramme und
+die Plugin-Zwischenprodukte. Dazu gibt es eine [HTML-Leseversion](docs/DATENFLUSS_UND_TABELLEN_DE.html),
+einen [Feldkatalog als JSON](docs/datenvertrag.json) und ein
+[geprüftes Dummy-Beispiel](docs/beispiel/README_DE.md).
+
 Der MJAP-Plugin-Code bleibt unverändert. Die Anpassungen betreffen den Parser
 und ein separates Werkzeug, das Länderlayer in eine Kopie eines QGIS-Projekts
 einfügt. Die Ländererweiterung benötigt keine zusätzlichen Excel-Netzdaten.

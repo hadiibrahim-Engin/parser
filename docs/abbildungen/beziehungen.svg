@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 680" role="img">
+<title>Schlüssel und Beziehungen zwischen den vier Eingabetabellen</title>
+<rect width="1400" height="680" fill="#f5f8fa" rx="18"/>
+<g font-family="Arial, sans-serif" fill="#173340">
+<text x="32" y="36" font-size="24" font-weight="700" fill="#173340" text-anchor="start">Schlüssel und Beziehungen zwischen den vier Eingabetabellen</text>
+<rect x="40" y="100" width="465" height="165" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="58" y="129" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Stationen.csv</text>
+<text x="58" y="157" font-size="16" font-weight="400" fill="#173340" text-anchor="start">MJAP-ID = Stationsschlüssel</text>
+<text x="58" y="181" font-size="16" font-weight="400" fill="#173340" text-anchor="start">lat / long = Position</text>
+<text x="58" y="205" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Kann Anfang, Ende oder Y-Knoten sein</text>
+<rect x="830" y="100" width="520" height="165" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="848" y="129" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Netzelemente.csv</text>
+<text x="848" y="157" font-size="16" font-weight="400" fill="#173340" text-anchor="start">MJAP-ID = Elementschlüssel</text>
+<text x="848" y="181" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Anfang / Ende / T / Y → Stationen.MJAP-ID</text>
+<text x="848" y="205" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Ein Element kann mehrere Legs besitzen</text>
+<rect x="830" y="420" width="520" height="165" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="848" y="449" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Freischaltungen.csv</text>
+<text x="848" y="477" font-size="16" font-weight="400" fill="#173340" text-anchor="start">MJAP-ID = Schaltungskennung</text>
+<text x="848" y="501" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Netzelement:MJAP-ID → Elementschlüssel</text>
+<text x="848" y="525" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Projekt → Projekte.Projektname</text>
+<rect x="40" y="420" width="465" height="165" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="58" y="449" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Projekte.csv</text>
+<text x="58" y="477" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Projektname = Projekt-Join-Schlüssel</text>
+<text x="58" y="501" font-size="16" font-weight="400" fill="#173340" text-anchor="start">betroffener Standort = Stations-ID-Liste</text>
+<text x="58" y="525" font-size="16" font-weight="400" fill="#173340" text-anchor="start">von / bis = Projektzeitraum</text>
+<path d="M830 180 L505 180" stroke="#335566" stroke-width="2.4" fill="none"/>
+<polygon points="505,180 516.0,175.0 516.0,185.0" fill="#335566"/>
+<rect x="571.3" y="154.0" width="192.4" height="22" fill="#f5f8fa"/>
+<text x="667.5" y="171.0" font-size="15" font-weight="400" fill="#173340" text-anchor="middle">Anfang / Ende / Y / T</text>
+<path d="M1090 420 L1090 265" stroke="#335566" stroke-width="2.4" fill="none"/>
+<polygon points="1090,265 1095.0,276.0 1085.0,276.0" fill="#335566"/>
+<rect x="1002.2" y="316.5" width="175.6" height="22" fill="#f5f8fa"/>
+<text x="1090.0" y="333.5" font-size="15" font-weight="400" fill="#173340" text-anchor="middle">Netzelementreferenz</text>
+<path d="M830 500 L505 500" stroke="#335566" stroke-width="2.4" fill="none"/>
+<polygon points="505,500 516.0,495.0 516.0,505.0" fill="#335566"/>
+<rect x="567.1" y="474.0" width="200.8" height="22" fill="#f5f8fa"/>
+<text x="667.5" y="491.0" font-size="15" font-weight="400" fill="#173340" text-anchor="middle">Projektname (optional)</text>
+<path d="M270 420 L270 265" stroke="#335566" stroke-width="2.4" fill="none"/>
+<polygon points="270,265 275.0,276.0 265.0,276.0" fill="#335566"/>
+<rect x="152.8" y="316.5" width="234.4" height="22" fill="#f5f8fa"/>
+<text x="270.0" y="333.5" font-size="15" font-weight="400" fill="#173340" text-anchor="middle">Ein oder mehrere Standorte</text>
+<text x="40" y="635" font-size="19" font-weight="700" fill="#173340" text-anchor="start">In Excel: Roh-ID Berlin_380. Im Plugin-Paket: vollständige ID Amprion_Berlin_380.</text>
+</g></svg>

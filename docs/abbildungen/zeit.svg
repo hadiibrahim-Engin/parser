@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 625" role="img">
+<title>Betriebsphasen und Schaltungszeiträume beim direkten MJAP-Import</title>
+<rect width="1400" height="625" fill="#f5f8fa" rx="18"/>
+<g font-family="Arial, sans-serif" fill="#173340">
+<text x="32" y="36" font-size="24" font-weight="700" fill="#173340" text-anchor="start">Betriebsphasen und Schaltungszeiträume beim direkten MJAP-Import</text>
+<rect x="30" y="80" width="1340" height="125" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="48" y="109" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Paarweise Listen mit gleicher Länge</text>
+<text x="48" y="137" font-size="16" font-weight="400" fill="#173340" text-anchor="start">IBN - Mehrfach: 01.01.2025;01.01.2030</text>
+<text x="48" y="161" font-size="16" font-weight="400" fill="#173340" text-anchor="start">ABN - Mehrfach: 31.12.2029;31.12.2035</text>
+<text x="48" y="185" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Nur direkter Plugin-Mehrfachimport; Parser-MJAP-Weg: einzelne Termine.</text>
+<path d="M180 300 L1310 300" stroke="#335566" stroke-width="2.4" fill="none"/>
+<path d="M180 293 L180 307" stroke="#335566" stroke-width="2.4" fill="none"/>
+<text x="180" y="335" font-size="17" font-weight="400" fill="#173340" text-anchor="middle">2025</text>
+<path d="M465 293 L465 307" stroke="#335566" stroke-width="2.4" fill="none"/>
+<text x="465" y="335" font-size="17" font-weight="400" fill="#173340" text-anchor="middle">2028</text>
+<path d="M655 293 L655 307" stroke="#335566" stroke-width="2.4" fill="none"/>
+<text x="655" y="335" font-size="17" font-weight="400" fill="#173340" text-anchor="middle">2030</text>
+<path d="M1130 293 L1130 307" stroke="#335566" stroke-width="2.4" fill="none"/>
+<text x="1130" y="335" font-size="17" font-weight="400" fill="#173340" text-anchor="middle">2035</text>
+<rect x="180" y="375" width="425" height="72" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="198" y="404" font-size="19" font-weight="700" fill="#173340" text-anchor="start">SK_A: erste Phase</text>
+<text x="198" y="432" font-size="16" font-weight="400" fill="#173340" text-anchor="start">2025 bis Ende 2029</text>
+<rect x="655" y="375" width="580" height="72" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
+<text x="673" y="404" font-size="19" font-weight="700" fill="#173340" text-anchor="start">SK_A_1: zweite Phase</text>
+<text x="673" y="432" font-size="16" font-weight="400" fill="#173340" text-anchor="start">2030 bis Ende 2035</text>
+<path d="M465 275 L465 300" stroke="#335566" stroke-width="2.4" fill="none"/>
+<polygon points="465,300 460.0,289.0 470.0,289.0" fill="#335566"/>
+<text x="345" y="260" font-size="18" font-weight="700" fill="#173340" text-anchor="start">Schaltung 2028 → erste Phase</text>
+<rect x="30" y="495" width="1340" height="95" rx="12" fill="#fff0d9" stroke="#aac1c8"/>
+<text x="48" y="524" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Unbekanntes ABN bleibt unbekannt</text>
+<text x="48" y="552" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Der separate Zeitreihen-SQL-Vergleich schließt NULL-ABN aus. Keine Enddaten erfinden.</text>
+</g></svg>

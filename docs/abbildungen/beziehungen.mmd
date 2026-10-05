@@ -1,0 +1,5 @@
+erDiagram
+  STATIONEN ||--o{ NETZELEMENTE : "Anfang / Ende / T / Y"
+  NETZELEMENTE ||--o{ FREISCHALTUNGEN : "Netzelement:MJAP-ID"
+  PROJEKTE o|--o{ FREISCHALTUNGEN : "Projektname = Projekt"
+  STATIONEN }|--o{ PROJEKTE : "betroffener Standort als ID-Liste"

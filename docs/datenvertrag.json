@@ -1,0 +1,835 @@
+{
+  "stand": "2026-10-06",
+  "codebasis": {
+    "parser": "95fb92c",
+    "mjap": "2594712"
+  },
+  "excel": {
+    "columns": [
+      "Spalte",
+      "Logischer Typ",
+      "SUB-Zeile",
+      "Netzelement-Zeile",
+      "Quelle / Regel / Beispiel"
+    ],
+    "rows": [
+      [
+        "TSO",
+        "Text",
+        "P",
+        "P",
+        "Eigentümer; Bestandteil der erzeugten ID. Beispiel: Amprion."
+      ],
+      [
+        "ELEMENT ID",
+        "Text-ID",
+        "P",
+        "P",
+        "Stationen eindeutig im ausgewählten Blatt; im MJAP-Modus auch erzeugte Element-IDs eindeutig. Beispiel: Berlin_380 / LINE_471."
+      ],
+      [
+        "LONG-NAME",
+        "Text",
+        "O",
+        "O",
+        "Fachlicher Name; für Beschriftungen empfohlen. Beispiel: Umspannwerk Berlin."
+      ],
+      [
+        "DESCRIPTION",
+        "Text",
+        "O",
+        "O, nicht übernommen",
+        "Stationsbeschreibung wird Kommentar; Netzelementbeschreibung hat keine Zielspalte."
+      ],
+      [
+        "Latitude",
+        "Dezimalzahl WGS84",
+        "P",
+        "Leer lassen; nicht ausgewertet",
+        "Breitengrad, -90 bis 90. Beispiel: 52.459373."
+      ],
+      [
+        "Longitude",
+        "Dezimalzahl WGS84",
+        "P",
+        "Leer lassen; nicht ausgewertet",
+        "Längengrad, -180 bis 180. Beispiel: 13.361402."
+      ],
+      [
+        "Station 1",
+        "Text-Referenz",
+        "Leer lassen; nicht ausgewertet",
+        "P im MJAP-Modus",
+        "Roh-ELEMENT-ID einer vorhandenen SUB-Zeile, z. B. Berlin_380; nicht Amprion_Berlin_380."
+      ],
+      [
+        "Station 2",
+        "Text-Referenz",
+        "Leer lassen; nicht ausgewertet",
+        "P im MJAP-Modus",
+        "Zweite vorhandene SUB-ID. Beide Endpunkte brauchen verschiedene IDs und Koordinaten."
+      ],
+      [
+        "VOLTAGE-LEVEL",
+        "Text / Spannungsliste",
+        "S",
+        "S",
+        "Einheit fachlich kV; Zahlen, Text DC oder durch / getrennte Werte. Beispiel: 380.0/110.0. Leer ist technisch möglich, aber die Stile können keinen passenden Treffer liefern."
+      ],
+      [
+        "ELEMENT-TYPE",
+        "Text-Code",
+        "P: SUB",
+        "P: bekannter anderer Typ",
+        "SUB, LINE, TRA, TIE, DCL, CAP, BUB, GEN, IND, LOAD, PPL, PROD. Groß-/Kleinschreibung wird normalisiert."
+      ],
+      [
+        "UCTE CODE",
+        "Text-ID",
+        "O",
+        "O",
+        "Wird ID-UCTE; bei Stationen zusätzlich ID. Nicht mit ID-OPC verwechseln."
+      ],
+      [
+        "STARTLIFETIME",
+        "Datum",
+        "P im MJAP-Modus",
+        "P im MJAP-Modus",
+        "Wird IBN. Einzeltermin im abgesicherten Weg, z. B. 2025-05-09."
+      ],
+      [
+        "ENDLIFETIME",
+        "Datum",
+        "O",
+        "O",
+        "Wird ABN; kein Datum erfinden. Falls vorhanden mindestens IBN; im abgesicherten Weg Einzeltermin."
+      ]
+    ]
+  },
+  "excel_optional": {
+    "columns": [
+      "Spalte / Muster",
+      "Spalte vorhanden?",
+      "Werte / Verhalten"
+    ],
+    "rows": [
+      [
+        "Multipod",
+        "O",
+        "Nur bei einzelnen Multipod-Beinen befüllen: Roh-ID einer vorhandenen SUB-Zeile, z. B. XKnoten_380. Nicht X-Koordinate oder Anzahl der Beine."
+      ],
+      [
+        "Interesting/Relevant for (50Hertz)",
+        "O; dynamisch erkannt",
+        "Beispiel für Relevanz: nicht leer und nicht 0/0.0/false/nein/no bedeutet relevant; leer oder diese Null-Marker bedeutet nicht relevant."
+      ],
+      [
+        "Weitere Überschriften mit relevant for oder interesting",
+        "O; dynamisch erkannt",
+        "Organisationsname wird aus Klammern bzw. dem Rest des Headers abgeleitet. Mehrere Treffer ergeben 50Hertz;TennetD als Text."
+      ],
+      [
+        "Map Multipod",
+        "O",
+        "Wird nicht für Multipod-Geometrie ausgewertet."
+      ],
+      [
+        "ACTION",
+        "O",
+        "Nicht übernommen; daraus wird keine Maßnahme in Freischaltungen.csv erzeugt."
+      ],
+      [
+        "OPC INTERESTING ASSET",
+        "O",
+        "Bekannte, ausdrücklich ignorierte Spalte; kein ID-OPC-Mapping und keine automatische Relevanz."
+      ],
+      [
+        "CCR/ROA",
+        "O",
+        "Wird nicht in Region geschrieben; Region bleibt ohne Quelle leer."
+      ],
+      [
+        "OPC Map only",
+        "O",
+        "Wird nicht ausgewertet."
+      ],
+      [
+        "Interconnector…",
+        "O",
+        "Solche Präfix-Spalten werden von der Relevanzerkennung ausgeschlossen."
+      ]
+    ]
+  },
+  "stations": {
+    "columns": [
+      "Nr.",
+      "Ausgabespalte",
+      "Logischer Typ",
+      "Wert",
+      "Quelle / automatisch erzeugt",
+      "Plugin liest / Nutzen"
+    ],
+    "rows": [
+      [
+        1,
+        "Eigentümer",
+        "Text",
+        "P / A",
+        "TSO",
+        "Ja; Stammdaten."
+      ],
+      [
+        2,
+        "MJAP-ID",
+        "Text-ID",
+        "P / A",
+        "TSO + _ + ELEMENT ID, z. B. Amprion_Berlin_380",
+        "Ja; Standortschlüssel und Referenzziel."
+      ],
+      [
+        3,
+        "Stationsname - Langname",
+        "Text",
+        "O / A",
+        "LONG-NAME; bei abweichender ID-Konvention ggf. Ersatzname",
+        "Ja; Name/Beschriftung."
+      ],
+      [
+        4,
+        "lat",
+        "Dezimalzahl als CSV-Text",
+        "P / A",
+        "Latitude; Dezimalkomma im MJAP-Ausgang",
+        "Ja; Breitengrad, z. B. 52,459373."
+      ],
+      [
+        5,
+        "long",
+        "Dezimalzahl als CSV-Text",
+        "P / A",
+        "Longitude; Dezimalkomma im MJAP-Ausgang",
+        "Ja; Längengrad, z. B. 13,361402."
+      ],
+      [
+        6,
+        "Spannung",
+        "JSON-Liste in einem Textfeld",
+        "S / A",
+        "VOLTAGE-LEVEL, z. B. [\"380\",\"110\"]; ohne Quelle []",
+        "Ja; Standortstile, keine SQL-Array-Spalte."
+      ],
+      [
+        7,
+        "IBN",
+        "Datumstext TT.MM.JJJJ",
+        "P / A",
+        "STARTLIFETIME",
+        "Ja; wird Excel-/QGIS-Datum."
+      ],
+      [
+        8,
+        "ABN",
+        "Datumstext TT.MM.JJJJ",
+        "O / A",
+        "ENDLIFETIME; unbekannt bleibt echte leere Zelle",
+        "Ja; offenes Betriebsende / Einschränkung bei virtuellen Zeitreihen beachten."
+      ],
+      [
+        9,
+        "Stationsname - Kurzname",
+        "Text",
+        "O / A",
+        "Derselbe erzeugte Name wie Langname; kein separates Excel-Kurzname-Mapping",
+        "Nein; im aktuellen Konverter nicht weitergereicht."
+      ],
+      [
+        10,
+        "reales UW",
+        "Text-Boolean",
+        "A; stets erzeugt",
+        "Wahr oder Falsch anhand X-Präfix des Stationsteils",
+        "Ja; Plugin übersetzt nach true/false; Stil unterscheidet UW und virtuellen Knoten."
+      ],
+      [
+        11,
+        "Stationsname - OPC-Name",
+        "Text",
+        "L",
+        "Keine definierte Quelle",
+        "Nein; leer lassen."
+      ],
+      [
+        12,
+        "ID-GUID intern-1",
+        "Text-ID",
+        "L",
+        "Keine definierte Quelle",
+        "Nein; leer lassen."
+      ],
+      [
+        13,
+        "ID-GUID intern-2",
+        "Text-ID",
+        "L",
+        "Keine definierte Quelle",
+        "Nein; leer lassen."
+      ],
+      [
+        14,
+        "ID-OPC",
+        "Text-ID",
+        "L",
+        "Keine definierte Quelle; UCTE CODE wird nicht hierhin kopiert",
+        "Ja, als Attribut; Wert darf leer bleiben."
+      ],
+      [
+        15,
+        "ID-UCTE",
+        "Text-ID",
+        "O / A",
+        "UCTE CODE",
+        "Nein; der aktuelle Attributexport übernimmt ID-OPC, nicht ID-UCTE."
+      ],
+      [
+        16,
+        "relevant für",
+        "Textliste mit ;",
+        "O / A",
+        "Dynamische Relevanzspalten, z. B. 50Hertz;TennetD",
+        "Nein; aktuell nicht im SO-Attributblatt."
+      ],
+      [
+        17,
+        "ID",
+        "Text-ID",
+        "O / A",
+        "UCTE CODE",
+        "Nein; nicht der Shapefile-Schlüssel id."
+      ],
+      [
+        18,
+        "Kommentar",
+        "Text",
+        "O / A",
+        "DESCRIPTION",
+        "Nein; aktuell nicht im SO-Attributblatt."
+      ],
+      [
+        19,
+        "IBN - Mehrfach",
+        "Textliste",
+        "L",
+        "Keine definierte Quelle für Stationen",
+        "Nein; Plugin spaltet nur Netzelement-Phasen auf."
+      ],
+      [
+        20,
+        "ABN - Mehrfach",
+        "Textliste",
+        "L",
+        "Keine definierte Quelle für Stationen",
+        "Nein; leer lassen."
+      ]
+    ]
+  },
+  "elements": {
+    "columns": [
+      "Nr.",
+      "Ausgabespalte",
+      "Logischer Typ",
+      "Wert",
+      "Quelle / automatisch erzeugt",
+      "Plugin liest / Nutzen"
+    ],
+    "rows": [
+      [
+        1,
+        "Eigentümer",
+        "Text",
+        "P / A",
+        "TSO",
+        "Ja; Stammdaten."
+      ],
+      [
+        2,
+        "MJAP-ID",
+        "Text-ID",
+        "P / A",
+        "TSO + _ + ELEMENT ID, z. B. Amprion_LINE_471",
+        "Ja; Elementschlüssel, später ggf. Phasen-Suffix."
+      ],
+      [
+        3,
+        "Stromkreisname - Langname",
+        "Text",
+        "O / A",
+        "LONG-NAME",
+        "Ja; Stammdaten/Beschriftung."
+      ],
+      [
+        4,
+        "Region",
+        "Text",
+        "L",
+        "Keine definierte Quelle; CCR/ROA wird nicht übernommen",
+        "Ja, als optionales Attribut."
+      ],
+      [
+        5,
+        "Element Typ",
+        "Text-Code/-Bezeichnung",
+        "P / A",
+        "ELEMENT-TYPE; MJAP-Zuordnung LINE→Stromkreis, TRA→Trafo, TIE→Kuppelleitung, DCL→HGÜ-Strecke",
+        "Ja; exakter Wert Trafo aktiviert Standort-Schaltungszuordnung."
+      ],
+      [
+        6,
+        "Spannung",
+        "Text, ggf. /-Liste",
+        "S / A",
+        "VOLTAGE-LEVEL, z. B. 380 oder 380/110; keine JSON-Liste",
+        "Ja; Kategorie des Stromkreisstils."
+      ],
+      [
+        7,
+        "relevant für",
+        "Textliste mit ;",
+        "O / A",
+        "Dynamische Relevanzspalten",
+        "Ja; optionales Attribut, keine Topologiereferenz."
+      ],
+      [
+        8,
+        "IBN",
+        "Datumstext TT.MM.JJJJ",
+        "P / A",
+        "STARTLIFETIME, einzelner Termin",
+        "Ja; wird durch befüllte Mehrfachtermine je Phase überschrieben."
+      ],
+      [
+        9,
+        "ABN",
+        "Datumstext TT.MM.JJJJ oder Text-Leerwert",
+        "O / A",
+        "ENDLIFETIME; bei fehlendem Wert im MJAP-Modus ein Leerzeichen",
+        "Ja; Leerzeichen wird zu fehlendem Datum, nicht zu einem fachlichen Endtermin."
+      ],
+      [
+        10,
+        "IBN - Mehrfach",
+        "Textliste",
+        "A",
+        "Im aktuellen MJAP-Parser eine Einzelliste aus IBN",
+        "Ja; .str.split und paarweises explode; Überschrift und Textlesbarkeit nötig."
+      ],
+      [
+        11,
+        "ABN - Mehrfach",
+        "Textliste",
+        "A",
+        "Bei Einzeltermin-Quelle Einzelliste aus ABN; bei unbekanntem ABN ein Leerzeichen. Mehrteilige ABN sind im Parser-MJAP-Weg nicht freigegeben.",
+        "Ja; genau eine Phase passend zur Einzel-IBN im geprüften Weg."
+      ],
+      [
+        12,
+        "Station Anfang",
+        "Vollständige Stations-MJAP-ID",
+        "P / A",
+        "Auflösung von Station 1 zur ID des Eigentümers der referenzierten SUB-Zeile",
+        "Ja; Transformatorstandort. Kann eine andere Eigentümer-ID als das Netzelement haben."
+      ],
+      [
+        13,
+        "Station Ende",
+        "Vollständige Stations-MJAP-ID",
+        "P / A",
+        "Auflösung von Station 2",
+        "Nein direkt; die Geometrie liest das :MJAP-ID-Feld."
+      ],
+      [
+        14,
+        "Station T-1",
+        "Text-Referenz",
+        "L",
+        "Parser befüllt dies nicht",
+        "Nein direkt; zusätzliche Topologie benutzt :MJAP-ID."
+      ],
+      [
+        15,
+        "Station T-2",
+        "Text-Referenz",
+        "L",
+        "Parser befüllt dies nicht",
+        "Nein direkt; leer lassen."
+      ],
+      [
+        16,
+        "Y-Knoten-1",
+        "Roh-Stations-ID",
+        "O / A",
+        "Multipod, z. B. XKnoten_380",
+        "Nein direkt; Plugin-Geometrie benutzt Y-Knoten-1: MJAP-ID."
+      ],
+      [
+        17,
+        "Y-Knoten-2",
+        "Text-Referenz",
+        "L",
+        "Parser befüllt dies nicht",
+        "Nein direkt; leer lassen."
+      ],
+      [
+        18,
+        "Stromkreisname - Kurzname",
+        "Text",
+        "O / A",
+        "LONG-NAME; kein separates Kurzname-Mapping",
+        "Nein; aktuell nicht weitergereicht."
+      ],
+      [
+        19,
+        "Stromkreisname - OPC-Name",
+        "Text",
+        "L",
+        "Keine definierte Quelle",
+        "Nein; leer lassen."
+      ],
+      [
+        20,
+        "ID-GUID intern-1",
+        "Text-ID",
+        "L",
+        "Keine definierte Quelle",
+        "Nein; leer lassen."
+      ],
+      [
+        21,
+        "ID-GUID intern-2",
+        "Text-ID",
+        "L",
+        "Keine definierte Quelle",
+        "Nein; leer lassen."
+      ],
+      [
+        22,
+        "ID-OPC",
+        "Text-ID",
+        "L",
+        "Keine definierte Quelle",
+        "Ja, als optionales Attribut; nicht mit UCTE CODE füllen."
+      ],
+      [
+        23,
+        "ID-UCTE",
+        "Text-ID",
+        "O / A",
+        "UCTE CODE",
+        "Nein; aktuell nicht weitergereicht."
+      ],
+      [
+        24,
+        "ID",
+        "Text-ID",
+        "L",
+        "Keine definierte Quelle",
+        "Nein; keine neue Pflicht-ID erfinden."
+      ],
+      [
+        25,
+        "Station Anfang:MJAP-ID",
+        "Vollständige Stations-MJAP-ID",
+        "P / A",
+        "Wie Station Anfang",
+        "Ja; erster Geometrieanschluss."
+      ],
+      [
+        26,
+        "Station Ende:MJAP-ID",
+        "Vollständige Stations-MJAP-ID",
+        "P / A",
+        "Wie Station Ende",
+        "Ja; zweiter Geometrieanschluss."
+      ],
+      [
+        27,
+        "Station T-1:MJAP-ID",
+        "Vollständige Stations-MJAP-ID",
+        "L im Parser; B direkt in MJAP",
+        "Parser leer; beim direkten Y-Import dritte Anschlussstation",
+        "Ja; entscheidet P2P oder Y, deshalb wirklich leer lassen, wenn unbenutzt."
+      ],
+      [
+        28,
+        "Station T-2:MJAP-ID",
+        "Vollständige Stations-MJAP-ID",
+        "L im Parser; B direkt in MJAP",
+        "Parser leer; beim direkten Doppel-Y-Import vierte Anschlussstation",
+        "Ja; nur zusammen mit vollständiger Doppel-Y-Topologie füllen."
+      ],
+      [
+        29,
+        "Y-Knoten-1: MJAP-ID",
+        "Vollständige Stations-MJAP-ID",
+        "O / A; B direkt in MJAP",
+        "Auflösung von Multipod; bei zusammengefasster Y-Topologie notwendiger Y1-Knoten",
+        "Ja; Leerzeichen nach Doppelpunkt beachten."
+      ],
+      [
+        30,
+        "Y-Knoten-2: MJAP-ID",
+        "Vollständige Stations-MJAP-ID",
+        "L im Parser; B direkt in MJAP",
+        "Parser leer; beim direkten Doppel-Y-Import notwendiger Y2-Knoten",
+        "Ja; Überschrift behalten, unbenutzt echte leere Zelle."
+      ]
+    ]
+  },
+  "outages": {
+    "columns": [
+      "Spalte",
+      "Logischer Typ",
+      "Überschrift",
+      "Wert",
+      "Was befüllen / was passiert"
+    ],
+    "rows": [
+      [
+        "MJAP-ID",
+        "Text-ID",
+        "Pflicht",
+        "P",
+        "Eindeutige Schaltungskennung, z. B. FS_1. Kein Netzelementschlüssel."
+      ],
+      [
+        "Netzelement:MJAP-ID",
+        "Text-Referenz",
+        "Pflicht",
+        "P",
+        "Vorhandene erzeugte Netzelement-ID, z. B. Amprion_TRA_1. Muss exakt passen."
+      ],
+      [
+        "interne ID",
+        "Text-ID",
+        "Pflicht",
+        "P",
+        "Nicht leer und eindeutig; Plugin erzeugt daraus MJAP-ID_Schaltung."
+      ],
+      [
+        "von",
+        "Datumstext TT.MM.JJJJ",
+        "Pflicht",
+        "P",
+        "Echter Schaltungsbeginn, z. B. 01.06.2028."
+      ],
+      [
+        "bis",
+        "Datumstext TT.MM.JJJJ",
+        "Pflicht",
+        "P",
+        "Echtes Schaltungsende; von ≤ bis. Gleicher Kalendertag ist zulässig."
+      ],
+      [
+        "Projekt",
+        "Text-Referenz",
+        "Pflicht",
+        "O; B für Projektleitung",
+        "Exakter Projektname aus Projekte.csv. Leer ohne Projektbezug; nie eine Netzelement-ID eintragen."
+      ],
+      [
+        "Maßnahme",
+        "Text / Stilwert",
+        "Parser ergänzt bei Fehlen",
+        "S",
+        "Fachliche Maßnahme, z. B. IBN oder ABN; für andere Schaltungen realen nicht leeren Wert führen. NULL kann Schaltungen unsichtbar machen."
+      ],
+      [
+        "Schaltungsart",
+        "Text / Stilwert",
+        "Parser ergänzt bei Fehlen",
+        "O / S",
+        "Wechselseitig oder ww (wechselweise) für wechselweise Darstellung; sonst gleichzeitig-Regel, sofern Maßnahme passt."
+      ],
+      [
+        "Schaltung",
+        "Text / Beschriftungswert",
+        "Parser ergänzt bei Fehlen",
+        "O / S",
+        "Täglich oder t (täglich) für tägliche Beschriftung; sonst ELSE-Regel."
+      ]
+    ]
+  },
+  "projects": {
+    "columns": [
+      "Spalte",
+      "Logischer Typ",
+      "Überschrift",
+      "Wert",
+      "Was befüllen / was passiert"
+    ],
+    "rows": [
+      [
+        "Projektname",
+        "Text-Schlüssel",
+        "Pflicht",
+        "P",
+        "Nicht leer und eindeutig; gleicher Wert wie Schaltungen.Projekt, z. B. Demo."
+      ],
+      [
+        "betroffener Standort",
+        "Textliste von Stations-MJAP-IDs",
+        "Pflicht",
+        "P",
+        "Mindestens eine vorhandene vollständige Stations-ID; mehrere durch Komma ohne Leerraum trennen. CSV-Feld bei mehreren IDs zitieren."
+      ],
+      [
+        "Umsetzungzeitraum von",
+        "Datumstext TT.MM.JJJJ",
+        "Pflicht",
+        "P",
+        "Echter Beginn des Projektzeitraums, z. B. 01.01.2028."
+      ],
+      [
+        "Umsetzungzeitraum bis",
+        "Datumstext TT.MM.JJJJ",
+        "Pflicht",
+        "P",
+        "Echtes Ende; Beginn ≤ Ende. Nicht aus einer beliebigen Stations-ABN erfinden."
+      ]
+    ]
+  },
+  "intermediate": {
+    "columns": [
+      "Datei",
+      "Feld",
+      "Logischer Typ",
+      "Automatische Herkunft"
+    ],
+    "rows": [
+      [
+        "SO.csv",
+        "MJAP-ID",
+        "Text-ID",
+        "Stations-MJAP-ID; als DataFrame-Index wieder in CSV geschrieben."
+      ],
+      [
+        "SO.csv",
+        "Längengrad",
+        "Dezimalzahl mit Punkt",
+        "Stationen.long, in WGS84."
+      ],
+      [
+        "SO.csv",
+        "Breitengrad",
+        "Dezimalzahl mit Punkt",
+        "Stationen.lat, in WGS84."
+      ],
+      [
+        "SK.csv",
+        "shape-ID",
+        "Text-ID",
+        "Element-/Phasen-ID, bei zusammengefassten Y-Topologien mit _Y1 usw. für einzelne Legs."
+      ],
+      [
+        "SK.csv",
+        "Standort Anfang",
+        "Vollständige Stations-ID",
+        "Anfang eines erzeugten Legs."
+      ],
+      [
+        "SK.csv",
+        "Standort Ende",
+        "Vollständige Stations-ID",
+        "Ende eines erzeugten Legs."
+      ],
+      [
+        "SK.csv",
+        "MJAP-ID",
+        "Text-ID",
+        "Element-/Phasen-ID; kann bei mehreren Legs mehrfach vorkommen."
+      ]
+    ]
+  },
+  "layers": {
+    "columns": [
+      "QGIS-Layer",
+      "Geometrie",
+      "Schlüssel / Verknüpfung",
+      "Zeitbeginn / Zeitende",
+      "Datendatei / Quelle"
+    ],
+    "rows": [
+      [
+        "Standorte",
+        "Point",
+        "id; Join zu SO_Attribute.MJAP-ID mit Prefix Attribute_",
+        "Attribute_IBN / Attribute_ABN",
+        "SO.shp plus SO_Attribute in attribute.xlsx"
+      ],
+      [
+        "Stromkreise",
+        "LineString",
+        "schlüssel; Join zu SK_Attribute.MJAP-ID mit Prefix Attribute_",
+        "Attribute_IBN / Attribute_ABN",
+        "SK.shp plus SK_Attribute in attribute.xlsx"
+      ],
+      [
+        "Standorte Schaltungen",
+        "MultiPoint",
+        "Standort_von wird mit Standort-id verbunden; im Assistenten für Trafo-Schaltungen",
+        "von / bis",
+        "Schaltungen_SO.gpkg"
+      ],
+      [
+        "Stromkreise Schaltungen",
+        "MultiLineString",
+        "MJAP-ID_x wird mit Stromkreis-schlüssel verbunden; alle Legs kombiniert",
+        "von / bis",
+        "Schaltungen_SK.gpkg"
+      ],
+      [
+        "Standorte Projekte",
+        "MultiPoint",
+        "betroffener Standort referenziert Standort-id; eine Geometrie pro Projekt",
+        "Umsetzungzeitraum von / Umsetzungzeitraum bis",
+        "Projekte_SO.gpkg"
+      ],
+      [
+        "Stromkreise Projekte",
+        "MultiLineString",
+        "Projekt → Standorte Projekte.Projektname; Schaltungsgeometrie wird wiederverwendet",
+        "Standorte Projekte_Umsetzungzeitraum von / Standorte Projekte_Umsetzungzeitraum bis",
+        "Schaltungen_SK.gpkg plus Projektjoin"
+      ],
+      [
+        "Netzregionen",
+        "Mitgelieferte Flächengeometrie",
+        "Kein Pflichtjoin auf die Excel-Netzdaten",
+        "Keine Zeitkonfiguration im Assistenten",
+        "Kopie von resources/geodata/Netzregionen.gpkg"
+      ],
+      [
+        "DE/NL/BE/FR-Länder",
+        "Länderflächen",
+        "Separates Hintergrundkartenwerkzeug",
+        "Kein Netz-Betriebsdatum",
+        "Laender.gpkg im Ausgabeordner des Kartenwerkzeugs"
+      ]
+    ]
+  },
+  "reserved_outage_columns": [
+    "Element Typ",
+    "MJAP-ID_Schaltung",
+    "MJAP-ID_x",
+    "MJAP-ID_x_orig",
+    "MJAP-ID_y",
+    "Standort_von",
+    "Station Anfang",
+    "_ABN_eff_ts",
+    "_IBN_ts",
+    "_bis_ts",
+    "_von_ts",
+    "base_id",
+    "fid",
+    "out_idx"
+  ]
+}

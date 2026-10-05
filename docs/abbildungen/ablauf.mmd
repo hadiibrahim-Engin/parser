@@ -1,0 +1,10 @@
+flowchart LR
+  E[Excel: ein Netzblatt] --> P[Parser --mjap]
+  F[Echte Freischaltungen.csv] --> P
+  J[Echte Projekte.csv] --> P
+  P --> C[Vier CSVs im Eingabeordner]
+  C --> M[MJAP: Visualisierung erstellen]
+  M --> Z[SO/SK und XLSX-Zwischenprodukte]
+  Z --> G[Geometrien, Layer, Joins, Stile und Zeitfelder]
+  G --> Q[QGIS-Projekt speichern]
+  Q --> L[Optional: DE/NL/BE/FR ergänzen]

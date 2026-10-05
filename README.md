@@ -1,5 +1,11 @@
 # Excel → `Stationen.csv` + `Netzelemente.csv`
 
+The complete German [data handbook](docs/DATENFLUSS_UND_TABELLEN_DE.md) covers
+Excel input, every CSV field, logical types, required/optional values, four diagrams
+and the MJAP/QGIS outputs. Also included: a [standalone HTML copy](docs/DATENFLUSS_UND_TABELLEN_DE.html),
+a [JSON field inventory](docs/datenvertrag.json) and a
+[verified dummy example](docs/beispiel/README_DE.md).
+
 **MJAP / QGIS:** The new optional `--mjap` mode writes four MJAP-compatible
 tables without changing the existing default output contract. Offline country
 maps for Germany, Netherlands, Belgium and France can be added to an existing
