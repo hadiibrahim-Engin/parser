@@ -20,9 +20,13 @@ dev = ["pytest>=7.4"]
 
 [project.scripts]
 excel-to-csv = "excelToCsv.cli:main"
+qgis-country-map = "excelToCsv.mapProject:main"
 
 [tool.setuptools]
 packages = ["excelToCsv"]
+
+[tool.setuptools.package-data]
+excelToCsv = ["maps/*.geojson", "maps/*.md"]
 
 [tool.pytest.ini_options]
 # Test files follow this project's camelCase convention.

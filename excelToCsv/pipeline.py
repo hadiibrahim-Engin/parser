@@ -178,11 +178,27 @@ def runConversion(
     strict: bool = False,
     emptyPlaceholder: str = DEFAULT_EMPTY_PLACEHOLDER,
     targetFormatPath: Path | None = None,
+    mjap: bool = False,
+    outagesPath: Path | None = None,
+    projectsPath: Path | None = None,
 ) -> ConversionResult:
     """Full run: read Excel, convert, validate, write the CSV files."""
     targetFormat = loadTargetFormat(targetFormatPath, logger)
+    if not mjap and (outagesPath is not None or projectsPath is not None):
+        from excelToCsv.errors import ConversionError
+        raise ConversionError('--freischaltungen and --projekte require --mjap.')
+    if mjap:
+        from excelToCsv.mjap import mjapTargetFormat, prepareMjapFrames, prepareCompanions, writeCompanions
+        targetFormat = mjapTargetFormat(targetFormat)
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
-    result = convertTable(table, logger, strict=strict)
+    result = convertTable(table, logger, strict=strict or mjap)
+    if mjap:
+        result.stations, result.networkElements = prepareMjapFrames(result.stations, result.networkElements)
+        outages, projects = prepareCompanions(result.stations, result.networkElements, outagesPath, projectsPath)
+        # Optional topology values must become NA; only the paired date columns
+        # use a text sentinel because the unchanged plugin calls .str on them.
+        emptyPlaceholder = ''
+        encoding = 'utf-8-sig'
     result.stationsPath, result.networkElementsPath = writeCsvFiles(
         result.stations,
         result.networkElements,
@@ -193,6 +209,8 @@ def runConversion(
         emptyPlaceholder=emptyPlaceholder,
         targetFormat=targetFormat,
     )
+    if mjap:
+        writeCompanions(outages, projects, outputDir, logger)
     logger.info(
         "Conversion finished: %d station(s), %d network element(s), "
         "%d error(s), %d warning(s).",

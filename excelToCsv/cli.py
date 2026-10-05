@@ -35,6 +35,12 @@ def buildParser() -> argparse.ArgumentParser:
         description="Converts an Excel network inventory into Stationen.csv and Netzelemente.csv.",
     )
     parser.add_argument("input", type=Path, help="Path to the input Excel file (.xlsx).")
+    parser.add_argument('--mjap', action='store_true',
+                        help='Write an MJAP-compatible four-table bundle; validate strictly.')
+    parser.add_argument('--freischaltungen', type=Path, dest='outagesPath',
+                        help='Existing switching CSV for --mjap; otherwise emit an empty table.')
+    parser.add_argument('--projekte', type=Path, dest='projectsPath',
+                        help='Existing project CSV for --mjap; otherwise emit an empty table.')
     parser.add_argument(
         "-o",
         "--output-dir",
@@ -231,6 +237,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             strict=arguments.strict,
             emptyPlaceholder=arguments.emptyPlaceholder,
             targetFormatPath=arguments.targetFormatPath,
+            mjap=arguments.mjap,
+            outagesPath=arguments.outagesPath,
+            projectsPath=arguments.projectsPath,
         )
     except ConversionError as exc:
         # The cause has already been logged in full detail. The report matters
