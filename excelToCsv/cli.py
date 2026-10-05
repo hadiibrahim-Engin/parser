@@ -38,9 +38,9 @@ def buildParser() -> argparse.ArgumentParser:
     parser.add_argument('--mjap', action='store_true',
                         help='Write an MJAP-compatible four-table bundle; validate strictly.')
     parser.add_argument('--freischaltungen', type=Path, dest='outagesPath',
-                        help='Existing switching CSV for --mjap; otherwise emit an empty table.')
+                        help='Nonempty switching CSV with real records; required for --mjap.')
     parser.add_argument('--projekte', type=Path, dest='projectsPath',
-                        help='Existing project CSV for --mjap; otherwise emit an empty table.')
+                        help='Nonempty project CSV with real records; required for --mjap.')
     parser.add_argument(
         "-o",
         "--output-dir",

@@ -4,7 +4,10 @@
 tables without changing the existing default output contract. Offline country
 maps for Germany, Netherlands, Belgium and France can be added to an existing
 QGIS project without changing the MJAP plugin. See [MJAP_DE.md](MJAP_DE.md) for
-German instructions, the exact compatibility rules and map commands.
+German instructions, the exact compatibility rules and map commands. Full wizard
+exports require nonempty real switching/project CSVs and valid IBN dates; invalid
+bundles are rejected before writing. See [MJAP_PRUEFBERICHT_DE.md](MJAP_PRUEFBERICHT_DE.md)
+for the complete real-QGIS test results.
 
 A production-oriented converter that reads an Excel network inventory and produces
 **exactly two** CSV files: `Stationen.csv` (substations) and `Netzelemente.csv`

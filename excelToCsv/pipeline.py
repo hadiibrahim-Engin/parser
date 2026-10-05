@@ -188,29 +188,33 @@ def runConversion(
         from excelToCsv.errors import ConversionError
         raise ConversionError('--freischaltungen and --projekte require --mjap.')
     if mjap:
-        from excelToCsv.mjap import mjapTargetFormat, prepareMjapFrames, prepareCompanions, writeCompanions
+        from excelToCsv.mjap import mjapTargetFormat, prepareMjapFrames, prepareCompanions, writeMjapBundle
         targetFormat = mjapTargetFormat(targetFormat)
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
     result = convertTable(table, logger, strict=strict or mjap)
     if mjap:
+        if any(issue.problem == 'Network element has no usable station reference.' for _, issue in result.issues):
+            from excelToCsv.errors import ConversionError
+            raise ConversionError('MJAP export cannot discard network elements with missing station references.', issues=result.issues)
         result.stations, result.networkElements = prepareMjapFrames(result.stations, result.networkElements)
         outages, projects = prepareCompanions(result.stations, result.networkElements, outagesPath, projectsPath)
-        # Optional topology values must become NA; only the paired date columns
-        # use a text sentinel because the unchanged plugin calls .str on them.
-        emptyPlaceholder = ''
-        encoding = 'utf-8-sig'
-    result.stationsPath, result.networkElementsPath = writeCsvFiles(
-        result.stations,
-        result.networkElements,
-        outputDir,
-        logger,
-        encoding=encoding,
-        quoteAll=quoteAll,
-        emptyPlaceholder=emptyPlaceholder,
-        targetFormat=targetFormat,
-    )
     if mjap:
-        writeCompanions(outages, projects, outputDir, logger)
+        result.stationsPath, result.networkElementsPath = writeMjapBundle(
+            targetFormat.applyToStations(result.stations),
+            targetFormat.applyToNetworkElements(result.networkElements), outages, projects,
+            outputDir, logger, quoteAll=quoteAll,
+        )
+    else:
+        result.stationsPath, result.networkElementsPath = writeCsvFiles(
+            result.stations,
+            result.networkElements,
+            outputDir,
+            logger,
+            encoding=encoding,
+            quoteAll=quoteAll,
+            emptyPlaceholder=emptyPlaceholder,
+            targetFormat=targetFormat,
+        )
     logger.info(
         "Conversion finished: %d station(s), %d network element(s), "
         "%d error(s), %d warning(s).",

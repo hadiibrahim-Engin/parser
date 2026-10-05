@@ -17,6 +17,7 @@ from qgis.PyQt import sip
 import qgis.utils
 from conftest import elementRow, stationRow, writeExcel
 from excelToCsv.pipeline import runConversion
+from excelToCsv.errors import ConversionError
 from excelToCsv.mapProject import addCountryMaps
 
 WORKS = Path(os.environ.get('NAHRIVA_WORKS', '/Users/hadi/Desktop/nahriva_works'))
@@ -45,8 +46,8 @@ def application(tmp_path_factory):
 @pytest.mark.parametrize('withOutages', [False, True])
 def testGeneratedBundleRunsThroughRealMjap(application, tmp_path, logger, withOutages):
     from mjap_plugin.toolbelt.sharepoint2qgis_v4 import sharepoint2qgis
-    rows = [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380'}),
-            stationRow(**{'ELEMENT ID': 'XDemo_380'}),
+    rows = [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380', 'Latitude': '53.55', 'Longitude': '9.99'}),
+            stationRow(**{'ELEMENT ID': 'XDemo_380', 'Latitude': '52.9', 'Longitude': '11.7'}),
             elementRow(**{'Station 1': 'XDemo_380', 'Multipod': 'XDemo_380'}),
             elementRow(**{'ELEMENT ID': 'TRA_1', 'ELEMENT-TYPE': 'TRA'})]
     workbook = writeExcel(rows, tmp_path / 'network.xlsx')
@@ -61,6 +62,11 @@ def testGeneratedBundleRunsThroughRealMjap(application, tmp_path, logger, withOu
                        'Umsetzungzeitraum von': '01.01.2028', 'Umsetzungzeitraum bis': '31.12.2028'}]).to_csv(projectsPath, index=False)
     source, output = tmp_path / 'bundle', tmp_path / 'converted'
     output.mkdir()
+    if not withOutages:
+        with pytest.raises(ConversionError, match='header-only'):
+            runConversion(workbook, source, logger, mjap=True)
+        assert not source.exists()
+        return
     runConversion(workbook, source, logger, mjap=True, outagesPath=outagesPath, projectsPath=projectsPath)
     sharepoint2qgis(str(source), str(output))
     assert len(pd.read_csv(output / 'SO.csv', sep=';')) == 3
