@@ -32,6 +32,18 @@ müssen deshalb fachlich geprüft werden.
 
 ## Konvertierung wiederholen
 
+Nur Excel → die beiden MJAP-Netztabellen, im Parser-Repository:
+
+```bash
+.venv/bin/python converter.py docs/beispiel/dreibein/DUMMY_Dreibein.xlsx \
+  -o output/dreibein-demo/netz --details
+```
+
+Dieser Standardaufruf erzeugt Stationen und Netzelemente im MJAP-Format ohne
+zusätzliche CSV-Eingaben. Für den vollständigen Assistenten müssen auch die
+echten Schaltungs- und Projekttabellen vorhanden sein. Das folgende Beispiel
+erzeugt deshalb zusätzlich ein vollständiges Viererpaket.
+
 Im Parser-Repository:
 
 ```bash

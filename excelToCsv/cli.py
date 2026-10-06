@@ -32,11 +32,14 @@ def buildParser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="converter.py",
-        description="Converts an Excel network inventory into Stationen.csv and Netzelemente.csv.",
+        description="Converts Excel into MJAP-compatible Stationen.csv and Netzelemente.csv (default).",
     )
     parser.add_argument("input", type=Path, help="Path to the input Excel file (.xlsx).")
-    parser.add_argument('--mjap', action='store_true',
+    exportMode = parser.add_mutually_exclusive_group()
+    exportMode.add_argument('--mjap', action='store_true',
                         help='Write an MJAP-compatible four-table bundle; validate strictly.')
+    exportMode.add_argument('--legacy', action='store_true',
+                           help='Use the historical CSV format and lenient validation; not safe for MJAP.')
     parser.add_argument('--freischaltungen', type=Path, dest='outagesPath',
                         help='Nonempty switching CSV with real records; required for --mjap.')
     parser.add_argument('--projekte', type=Path, dest='projectsPath',
@@ -57,7 +60,7 @@ def buildParser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--encoding",
         default="utf-8",
-        help="Encoding of the CSV output (use utf-8-sig for Excel-friendly BOM).",
+        help="Encoding for --legacy only; MJAP exports always use UTF-8 with BOM.",
     )
     parser.add_argument(
         "--header-row",
@@ -110,7 +113,7 @@ def buildParser() -> argparse.ArgumentParser:
         dest="emptyPlaceholder",
         metavar="TEXT",
         help=(
-            "Filler for columns that are empty in every row (default: a single space). "
+            "Filler for --legacy only (default: a single space). "
             "Without it pandas types such a column as numeric NaN and the .str accessor "
             "fails downstream. Pass '' to keep those columns truly empty."
         ),
@@ -128,8 +131,8 @@ def buildParser() -> argparse.ArgumentParser:
         "--strict",
         action="store_true",
         help=(
-            "Abort on the first phase that produced an error and write no CSV file at all. "
-            "By default errors are logged but both CSV files are still produced."
+            "Abort legacy export on validation errors. The default MJAP network "
+            "export and --mjap bundle always validate strictly."
         ),
     )
     parser.add_argument(
@@ -238,12 +241,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             emptyPlaceholder=arguments.emptyPlaceholder,
             targetFormatPath=arguments.targetFormatPath,
             mjap=arguments.mjap,
+            mjapNetwork=not arguments.mjap and not arguments.legacy,
             outagesPath=arguments.outagesPath,
             projectsPath=arguments.projectsPath,
         )
     except ConversionError as exc:
         # The cause has already been logged in full detail. The report matters
         # most for exactly this run, so it is written before returning.
+        logger.error("Export aborted: %s", exc)
         writeReport(arguments.issueFile, failureIssues(exc), logger)
         return EXIT_CONVERSION_ERROR
     except KeyboardInterrupt:  # pragma: no cover - interactive abort

@@ -51,7 +51,7 @@ oder vom Plugin gepflegt und soll nicht von Hand erfunden werden.
 | L | Vom aktuellen Parser ohne Quelle leer erzeugt | Leer lassen; keine IDs, Termine oder Region erfinden |
 | B | Bedingt nötig beim direkten MJAP-Import | Nur für die betreffende Topologie vollständig befüllen |
 
-`P` beschreibt hier den **geprüften Parser-Modus `--mjap`**. Das unveränderte
+`P` beschreibt hier den **MJAP-Netzexport (CLI-Standard) und `--mjap`**. Das unveränderte
 Plugin validiert weniger konsequent und kann auch ungültige oder unvollständige
 Daten annehmen, anschließend auslassen oder mit einer Fehlermeldung abbrechen.
 Das ist keine Freigabe solcher Daten.
@@ -128,7 +128,7 @@ Vollständig leere Datenzeilen werden übersprungen.
   Bei Datumswerten mit Uhrzeit bleibt im Ergebnis nur das Datum erhalten.
 - Numerische Excel-Datumswerte werden als Seriennummern des 1900-Datumssystems
   interpretiert. Ein abweichendes Datumssystem darf nicht ungeprüft vorausgesetzt werden.
-- `--mjap` verlangt eine gültige IBN pro Station und Netzelement. ABN darf fehlen;
+- Der Standard-Netzexport und `--mjap` verlangen eine gültige IBN pro Station und Netzelement. ABN darf fehlen;
   bei bekannten IBN/ABN muss IBN ≤ ABN gelten. Keine fehlenden Termine erfinden.
 - Koordinaten sind Breitengrad/Längengrad in WGS84, nicht Rechts-/Hochwerte eines
   projizierten Systems. Breitengrad: −90 bis 90; Längengrad: −180 bis 180.
@@ -138,7 +138,7 @@ Vollständig leere Datenzeilen werden übersprungen.
   prüfen**; ein numerisch gültiger Wert beweist keinen korrekten Standort.
 - `380.0/110.0` wird bei Stationen zu `["380","110"]` als JSON-Text mit doppelten
   Anführungszeichen und bei Netzelementen zu `380/110` als Text.
-- Der normale Parser unterstützt semikolongetrennte Datumswerte. Der geprüfte
+- Der historische Parser-Modus `--legacy` unterstützt semikolongetrennte Datumswerte. Der geprüfte
   MJAP-Modus dieses Parsers ist auf **einzelne IBN-/ABN-Termine pro Datensatz**
   ausgelegt. Mehrfachtermine gehören nicht zum freigegebenen Excel-Exportweg.
   Eine mehrteilige ABN wird aktuell nicht in jedem Fall vor dem Schreiben
@@ -148,15 +148,40 @@ Vollständig leere Datenzeilen werden übersprungen.
 
 | Modus | Ausgabe | Fehlerverhalten / Zweck |
 | --- | --- | --- |
-| Normaler Modus | Zwei CSVs mit 20 bzw. 30 Spalten | Datenfehler können protokolliert werden, während Dateien trotzdem entstehen; kein geprüftes MJAP-Assistentenpaket |
-| Normaler Modus mit `--strict` | Zwei CSVs | Gesammelte Validierungsfehler brechen ab; dadurch noch keine vollständige MJAP-Kompatibilität |
+| CLI-Standard: Excel + `-o` | Zwei CSVs mit 20 bzw. 30 Spalten | MJAP-Netzformat; strikte Validierung; UTF-8-BOM, Dezimalkomma, echte leere T-/Y-Zellen, passende Mehrfachdatumsfelder |
+| `--legacy` | Zwei CSVs im historischen Format | Fehlertolerant, allgemeine Leerzeichen-Platzhalter; nicht als MJAP-Eingabe verwenden |
+| `--legacy --strict` | Zwei historische CSVs | Fehler führen zum Abbruch; das historische Format wird dadurch nicht MJAP-kompatibel |
 | `--mjap` | Vier CSVs, sofern alle Voraussetzungen erfüllt sind | Strikte Validierung; feste Überschriften; kompatible Typübersetzung und Leerwertbehandlung |
 
-Der normale Modus füllt vollständig leere Spalten standardmäßig mit einem
+Der historische Modus `--legacy` füllt vollständig leere Spalten mit einem
 Leerzeichen. Für Topologiereferenzen ist das im Plugin gefährlich: `notna()`
-erkennt ein Leerzeichen als vorhandenen Anschluss. `--mjap` verwendet deshalb
+erkennt ein Leerzeichen als vorhandenen Anschluss. Beide MJAP-Exporte verwenden deshalb
 echte leere Zellen für unbenutzte Topologie und spezielle Textwerte nur bei
 fehlenden Datumswerten der Netzelemente.
+
+**Ein Excel-Netzblatt genügt für die beiden Netztabellen:**
+
+```bash
+.venv/bin/python converter.py "input.xlsx" -o "output/mjap" --details
+```
+
+Unter Windows mit dem Python-Interpreter der installierten Parser-Umgebung:
+
+```powershell
+python converter.py "C:\Daten\input.xlsx" -o "C:\Daten\output" --details
+```
+
+Der Aufruf erzeugt ausschließlich `Stationen.csv` und `Netzelemente.csv`.
+Keine manuelle CSV-Nachbearbeitung und keine Begleit-CSV als Eingabe sind für
+diesen Export nötig. Vorhandene Freischaltungen/Projekte im Ausgabeordner werden
+nicht verändert. **Der vollständige Plugin-Assistent braucht weiterhin alle
+vier Tabellen mit echten Schaltungs-/Projektdaten.** Ein Ordner mit nur zwei
+Dateien ist daher noch kein vollständiges Assistentenpaket.
+
+Die Python-API behält aus Kompatibilitätsgründen ihr historisches Verhalten:
+`runConversion(..., mjapNetwork=True)` wählt ausdrücklich den sicheren
+Zwei-Tabellen-Export; `mjap=True` das Viererpaket. Bei Validierungsfehlern bleibt
+der vorherige Export erhalten; nicht versehentlich alte Dateien importieren.
 
 Die allgemeine `targetFormat.example.json` ist für MJAP nicht automatisch
 geeignet: dort kann `TRA` anders übersetzt werden. Im MJAP-Modus sind
@@ -311,8 +336,8 @@ beibehalten, ihre Verbindungsbedeutung ändert sich jedoch gemäß dieser Tabell
 Eine Gruppe benötigt genau drei verschiedene äußere Stationen, dieselbe Spannung
 und denselben Leitungstyp (`LINE`, `TIE` oder `DCL`). Fehlende Beine, doppelte
 Endpunkte, mehrere Stromkreise am gleichen Multipod oder vier Beine werden als
-Fehler gemeldet. `--mjap` und `--strict` brechen vor dem Schreiben ab; der normale
-fehlertolerante Modus protokolliert den Fehler. Vier Beine an einem einzigen X
+Fehler gemeldet. Der Standardexport und `--mjap` brechen vor dem Schreiben ab;
+`--legacy` ohne `--strict` protokolliert den Fehler. Vier Beine an einem einzigen X
 werden derzeit nicht automatisch konvertiert: T-2 allein genügt im bestehenden
 Plugin nicht, weil dessen Doppel-Y-Topologie zwei Y-Knoten verlangt.
 
@@ -709,7 +734,8 @@ Ländergruppe wieder aktivieren oder das Kartenwerkzeug erneut anwenden.
 | --- | --- | --- |
 | Parser meldet fehlende Eingabespalte | Eine der 13 Überschriften fehlt, auch wenn ihre Werte optional wären | Überschrift gemäß Excel-Katalog ergänzen; richtiges Blatt auswählen |
 | `Dateien nicht gefunden` | Plugin findet nicht alle vier exakt benannten CSVs im ausgewählten Ordner | Den kompletten Paketordner auswählen; Dateinamen kontrollieren |
-| `KeyError` auf eine CSV-Spalte | Header fehlt, ist umbenannt oder hat andere Leerzeichen | Kanonische Überschrift wiederherstellen; vorzugsweise `--mjap` verwenden |
+| `KeyError: MJAP-ID` in `sk_df` | Keine Leitungsgeometrie erzeugt: z. B. Leerzeichen in T-/Y-Referenzen aus dem alten Standardformat oder ungültige Stationsreferenzen | CSVs mit dem aktuellen einfachen Excel-Aufruf neu erzeugen; die Netztabellen im MJAP-Eingabeordner ersetzen; den alten `--legacy`-Export nicht verwenden |
+| `KeyError` auf eine andere CSV-Spalte | Header fehlt, ist umbenannt oder hat andere Leerzeichen | Kanonische Überschrift wiederherstellen; aktuellen MJAP-Netzexport verwenden |
 | `KeyError: Standort_von` bei leeren Schaltungen | XLSX-Treiber erkennt Kopfzeile ohne Daten nicht als erwartete Felder | Nicht leere echte Begleittabellen verwenden; nicht mit Dummy-Datensätzen kaschieren |
 | Layerfelder heißen `Field1`, `Field2`, … | XLSX-Kopfzeile wurde als Daten gelesen, z. B. bei vollständig leeren Betriebsdaten | Im geprüften Parserweg gültige IBN-Daten führen; keine erfundenen Termine |
 | `.str`-Fehler | Vollständig leere Mehrfachterminspalte wurde numerisch eingelesen | Den vom MJAP-Parser erzeugten Text-/Leerwertvertrag verwenden |
@@ -738,6 +764,18 @@ Y-Schaltung und das zugehörige Projekt enthalten jeweils alle drei Y-Beine.
 Der Test prüft auch Quell-IDs, Namen, Stationspaare und leere T-/Y-Felder der
 Paarzeilen. Keine GUI-Warnung, keine kritische Meldung und keine Fehler in den
 geprüften aktiven Regelausdrücken; die bekannte ABN-Datumswarnung bleibt möglich.
+
+Die anschließende Korrektur des CLI-Standardexports reproduziert den gemeldeten
+`KeyError: MJAP-ID` mit dem alten Leerzeichenformat im echten MJAP-Code. Der
+einfache neue Excel-Aufruf erzeugt dagegen bei normalen Leitungen zwei und
+beim Dreibein fünf nutzbare Shape-/Attributzeilen. Seine Netztabellen sind
+bytegenau identisch mit denen des geprüften Viererpakets. Der frühere Hinweis,
+den Standardexport direkt in MJAP zu importieren, war falsch; dafür wird nun
+der korrigierte Standardexport verwendet. Nachgewiesen sind 422 Parser-Tests
+und 74 Tests in der echten QGIS-/MJAP-Umgebung. Das Plugin wurde nicht geändert.
+Die konkreten fehlerhaften Windows-Dateien wurden nicht bereitgestellt; ungültige
+Stationsreferenzen können denselben KeyError verursachen und werden im neuen
+Export vor dem Schreiben abgewiesen.
 
 Der unterstützte Teststand ist QGIS 3.40.3 / Qt 5 / Python 3.12 / pandas 2.2.3
 für MJAP. Die Parser-Tests laufen zusätzlich mit pandas 3.0.5. Daraus folgt

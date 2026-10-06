@@ -12,14 +12,33 @@ einfügt. Die Ländererweiterung benötigt keine zusätzlichen Excel-Netzdaten.
 
 ## CSV-Konvertierung
 
+Nur Excel → zwei MJAP-kompatible Netztabellen:
+
+```bash
+.venv/bin/python converter.py "input.xlsx" -o "output/mjap" --details
+```
+
+Unter Windows:
+
+```powershell
+python converter.py "C:\Daten\input.xlsx" -o "C:\Daten\output" --details
+```
+
+Der CLI-Standardexport validiert strikt und benötigt keine Begleit-CSV als
+Eingabe. Er schreibt genau Stationen und Netzelemente im Plugin-Format; vorhandene
+Schaltungs-/Projekttabellen bleiben erhalten. Für den vollständigen Assistenten
+müssen weiterhin alle vier Tabellen mit realen Daten vorhanden sein.
+
+Vollständiges Viererpaket:
+
 ```bash
 .venv/bin/python converter.py input.xlsx --mjap \
   --freischaltungen Freischaltungen.csv --projekte Projekte.csv \
   -o output/mjap
 ```
 
-Ohne `--mjap` bleibt die bisherige Konvertierung mit zwei CSV-Dateien unverändert.
-Der neue Modus validiert strikt und liefert genau die benötigten Tabellen:
+Der Standardexport und `--mjap` verwenden dieselbe geprüfte Serialisierung der
+Netztabellen. Das Viererpaket validiert auch die zusätzlichen Tabellen:
 
 | Datei | Verhalten im MJAP-Modus |
 | --- | --- |
@@ -109,8 +128,9 @@ Datumsfelder wird durch passende CSV-Textwerte vermieden. Eine Garantie für
 beliebige Eingaben, beliebige Plugin-Einstellungen oder andere Bibliotheksversionen
 ist damit nicht verbunden.
 
-Ohne `--mjap` bleibt der allgemeine Zwei-Tabellen-Export einschließlich seiner
-bisherigen Regeln erhalten; er ist nicht als geprüftes Assistentenpaket anzusehen.
+Mit `--legacy` bleibt der allgemeine Zwei-Tabellen-Export einschließlich seiner
+bisherigen Regeln verfügbar; er ist nicht als MJAP-Eingabe zu verwenden. Die
+Python-API wählt das sichere Netzformat ausdrücklich mit `mjapNetwork=True`.
 
 Die Kompatibilität wurde mit dem tatsächlichen MJAP-Konverter und dessen lokaler
 QGIS-3.40-/pandas-2.2-Umgebung geprüft. Die Umgebung ist in `mjap_plugin/environment.yml`

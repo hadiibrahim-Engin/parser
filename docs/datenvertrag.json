@@ -1,7 +1,7 @@
 {
   "stand": "2026-10-06",
   "codebasis": {
-    "parser": "main: Dreibein-Regel vom 06.10.2026",
+    "parser": "main: MJAP-Netzexport als CLI-Standard vom 06.10.2026",
     "mjap": "2594712"
   },
   "excel": {

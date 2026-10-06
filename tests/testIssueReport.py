@@ -92,7 +92,7 @@ def testSuccessfulRunReportsItsWarnings(tmp_path: Path) -> None:
     report = tmp_path / "issues.csv"
 
     exitCode = main(
-        [str(inputFile), "-o", str(tmp_path / "out"), "--issue-file", str(report), "--no-color"]
+        [str(inputFile), "-o", str(tmp_path / "out"), "--issue-file", str(report), "--legacy", "--no-color"]
     )
 
     assert exitCode == EXIT_SUCCESS

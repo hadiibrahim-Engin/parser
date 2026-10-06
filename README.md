@@ -6,8 +6,9 @@ and the MJAP/QGIS outputs. Also included: a [standalone HTML copy](docs/DATENFLU
 a [JSON field inventory](docs/datenvertrag.json) and a
 [verified dummy example](docs/beispiel/README_DE.md).
 
-**MJAP / QGIS:** The new optional `--mjap` mode writes four MJAP-compatible
-tables without changing the existing default output contract. Offline country
+**MJAP / QGIS:** The simple CLI command now writes two MJAP-compatible network
+tables by default. Use `--legacy` only for the historical general CSV format.
+The optional `--mjap` mode writes a validated four-table bundle. Offline country
 maps for Germany, Netherlands, Belgium and France can be added to an existing
 QGIS project without changing the MJAP plugin. See [MJAP_DE.md](MJAP_DE.md) for
 German instructions, the exact compatibility rules and map commands. Full wizard
@@ -67,8 +68,17 @@ python converter.py input.xlsx
 ```
 
 ```bash
-python converter.py input.xlsx --output-dir ./output
+python converter.py input.xlsx --output-dir ./output --details
 ```
+
+The simple command needs only Excel and an output directory. It writes UTF-8-BOM
+network CSVs with decimal-comma coordinates, genuine missing topology fields,
+paired dates and MJAP type translations. Invalid data aborts before replacing
+existing tables. `--details` affects logging, not the output format.
+
+The complete MJAP wizard still requires nonempty `Freischaltungen.csv` and
+`Projekte.csv` as well. They are not invented by the two-table export. Existing
+companion files in the output directory are preserved.
 
 Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 `python-calamine` is optional and only makes reading faster — see [Performance](#performance).
@@ -84,10 +94,12 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 | `--sheet` | Worksheet name or 0-based index (default: the first worksheet) |
 | `--header-row N` | 1-based Excel row holding the column headers (default: detected automatically) |
 | `--engine` | `auto` (default), `openpyxl` or `calamine` |
-| `--encoding` | Output encoding (default `utf-8`; use `utf-8-sig` for an Excel-friendly BOM) |
-| `--strict` | Abort on errors and write nothing; by default the files are written anyway |
+| `--encoding` | Legacy output encoding only; MJAP always uses UTF-8 with BOM |
+| `--strict` | Strict legacy validation; default MJAP export is always strict |
+| `--legacy` | Historical general format, including lenient validation and space fillers; not MJAP-safe |
+| `--mjap` | Complete four-table bundle; needs `--freischaltungen` and `--projekte` |
 | `--target-format FILE` | JSON renaming output columns and translating element types |
-| `--empty-placeholder TEXT` | Filler for columns empty in every row (default: one space) |
+| `--empty-placeholder TEXT` | Legacy filler only; never applied to the MJAP network export |
 | `--quote-all` | Quote every CSV field instead of only those that require it |
 | `--log-level` | Console minimum level: `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, `CRITICAL` |
 | `--details` | Print every single finding on the console instead of only the summary |
@@ -100,7 +112,7 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 | Code | Meaning |
 | --- | --- |
 | `0` | Clean run — both CSV files written, no errors |
-| `2` | Errors occurred. The files are still written unless `--strict` was used |
+| `2` | Conversion failed; default MJAP tables are not replaced. Legacy mode may still write invalid records |
 | `1` | Unexpected error (bug); a full traceback is logged |
 
 ---
@@ -120,8 +132,8 @@ flowchart TD
     D -->|yes| E["Drop completely empty rows"]
     E --> F["Normalize ELEMENT-TYPE to uppercase"]
     F --> G{"All types known?"}
-    G -->|no, strict| X2["Abort: unknown ELEMENT-TYPE"]
-    G -->|no, default| G2["Report and drop the unclassifiable rows"]
+    G -->|no, default or strict| X2["Abort: unknown ELEMENT-TYPE"]
+    G -->|no, legacy| G2["Report and drop the unclassifiable rows"]
     G2 --> H["Split rows: SUB vs. everything else"]
     G -->|yes| H
     H --> I["Build station records: coordinates, dates, voltages"]
@@ -130,7 +142,7 @@ flowchart TD
     K --> L["Validate references, duplicates, output schema"]
     L --> M{"Any error?"}
     M -->|yes, strict| X3["Abort: nothing is written"]
-    M -->|yes, default| N["Write Stationen.csv and Netzelemente.csv"]
+    M -->|yes, legacy| N["Write Stationen.csv and Netzelemente.csv"]
     M -->|no| N
     N --> P{"Any error?"}
     P -->|no| O["Exit code 0"]
@@ -299,7 +311,8 @@ Groups are keyed by the normalized `Multipod` reference and require exactly
 three distinct outer SUB stations, the same voltage and the same line type
 (`LINE`, `TIE` or `DCL`). Incomplete groups, repeated endpoints, several circuits
 sharing one node, and four-leg groups are reported as errors. `--strict` and
-`--mjap` abort before writing; the default lenient mode logs the errors.
+`--mjap` and the default network export abort before writing; `--legacy` without
+`--strict` logs the errors.
 A four-leg star at one node cannot be inferred as MJAP's double-Y, which needs
 two virtual nodes. `Station T-2` alone is insufficient.
 
@@ -320,7 +333,7 @@ and that contract changes without the converter changing. A JSON file therefore 
 columns and translates element types, so a rename never needs a code change:
 
 ```bash
-python converter.py input.xlsx --target-format targetFormat.json
+python converter.py input.xlsx --legacy --target-format targetFormat.json
 ```
 
 ```json
@@ -370,9 +383,12 @@ flowchart TD
 | `ERROR` | A real data defect. Reported in full; the affected cell stays empty |
 | `CRITICAL` | The closing summary of a flawed run — or the abort itself under `--strict` |
 
-### Errors do not stop the output
+### Historical lenient mode (`--legacy`)
 
-By default an error is **reported, not fatal**: both CSV files are written anyway, and the
+The default CLI export is strict and MJAP-safe. The behavior below applies only
+to `--legacy` (and the historical Python API default).
+
+In legacy mode an error is **reported, not fatal**: both CSV files are written anyway, and the
 log is the list of things to fix.
 
 ```
@@ -397,7 +413,7 @@ What a faulty row looks like in the output:
 Two things stay fatal regardless, because they are not data defects:
 a missing required input column and any breach of the output schema itself.
 
-`--strict` restores the original guarantee: the run aborts at the end of the failing
+`--strict` makes legacy validation strict: the run aborts at the end of the failing
 phase and not a single CSV file comes into existence.
 
 Every finding carries as much context as available:
@@ -859,6 +875,15 @@ business column and is never treated as a relevance column.
 
 ## Output format
 
+The **CLI default** uses MJAP serialization: UTF-8 with BOM, decimal-comma
+coordinates, truly empty unused T/Y references, paired IBN/ABN text and
+`TRA -> Trafo`. The two files are staged together and restored on ordinary
+write/publication errors. This does not guarantee a transaction across abrupt
+process death or concurrent readers. The known general-space format can produce
+`KeyError: MJAP-ID` in MJAP because no valid shape survives its topology filters.
+
+The format and examples below describe **`--legacy`**, not the CLI default.
+
 * UTF-8, comma separated, LF line endings, no index column, no extra columns
 * Headers exactly as specified, in exactly the specified order
 * Umlauts preserved
@@ -877,7 +902,7 @@ TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 
 ### Columns that are empty in every row
 
-Fifteen output columns have no defined source and therefore stay empty in every row —
+Several output columns have no defined source and therefore stay empty in every row —
 `Region`, `ID`, `IBN - Mehrfach`, `Station T-2`, `Y-Knoten-2` and friends. A column can
 also end up empty by accident, for instance `IBN` in a file where no lifetime dates are
 maintained.
@@ -909,7 +934,8 @@ Two boundaries keep the change small:
 * The filler is a serialization concern. The in-memory records from `convertTable()` keep
   their real empty strings — only the file gets the space.
 
-`--empty-placeholder ""` restores truly empty fields.
+`--legacy --empty-placeholder ""` disables the general filler; this alone does
+not implement MJAP date/type/coordinate rules.
 
 ---
 

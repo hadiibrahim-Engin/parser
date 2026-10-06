@@ -19,6 +19,10 @@ from conftest import elementRow, stationRow, writeExcel
 from excelToCsv.pipeline import runConversion
 from excelToCsv.errors import ConversionError
 from excelToCsv.mapProject import addCountryMaps
+from excelToCsv.cli import main
+from excelToCsv.mjap import OUTAGE_COLUMNS, PROJECT_COLUMNS
+from testMjap import rows as simpleRows
+from testMultipod import multipodRows
 
 WORKS = Path(os.environ.get('NAHRIVA_WORKS', '/Users/hadi/Desktop/nahriva_works'))
 
@@ -103,3 +107,34 @@ def testCountryMapsPreserveExistingLayersAndStayInEurope(application, tmp_path):
     assert project.mapLayer(original) is existing
     project.clear()
     del existing
+
+
+@pytest.mark.parametrize('source, count', [(simpleRows, 2), (multipodRows, 5)])
+def testSimpleExcelCommandSurvivesRealMjapShapeAndAttributeGeneration(application, tmp_path, source, count):
+    from mjap_plugin.toolbelt.sharepoint2qgis_v4 import gen_shape_df, gen_multiple_commissionings, gen_attribute_df
+    workbook = writeExcel(source(), tmp_path/'input.xlsx')
+    output = tmp_path/'csv'
+    assert main([str(workbook), '-o', str(output), '--details', '--no-color']) == 0
+    stations = pd.read_csv(output/'Stationen.csv', decimal=',')
+    elements = gen_multiple_commissionings(pd.read_csv(output/'Netzelemente.csv', decimal=','))
+    so, sk = gen_shape_df(stations, elements)
+    assert len(sk) == count and 'MJAP-ID' in sk.columns
+    soAttrs, skAttrs, _, _ = gen_attribute_df(so, sk, elements, stations,
+                                            pd.DataFrame(columns=OUTAGE_COLUMNS),
+                                            pd.DataFrame(columns=PROJECT_COLUMNS))
+    assert len(skAttrs) == count
+    assert len(soAttrs) == len(stations)
+
+
+def testLegacySpacesReproduceReportedMjapIdKeyError(application, tmp_path):
+    from mjap_plugin.toolbelt.sharepoint2qgis_v4 import gen_shape_df, gen_multiple_commissionings, gen_attribute_df
+    workbook = writeExcel(simpleRows(), tmp_path/'input.xlsx')
+    output = tmp_path/'csv'
+    assert main([str(workbook), '-o', str(output), '--legacy', '--no-color']) == 0
+    stations = pd.read_csv(output/'Stationen.csv', decimal=',')
+    elements = gen_multiple_commissionings(pd.read_csv(output/'Netzelemente.csv', decimal=','))
+    so, sk = gen_shape_df(stations, elements)
+    assert sk.empty and 'MJAP-ID' not in sk.columns
+    with pytest.raises(KeyError, match='MJAP-ID'):
+        gen_attribute_df(so, sk, elements, stations, pd.DataFrame(columns=OUTAGE_COLUMNS),
+                         pd.DataFrame(columns=PROJECT_COLUMNS))

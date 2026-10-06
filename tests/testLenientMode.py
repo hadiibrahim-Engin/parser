@@ -76,7 +76,7 @@ def testCliWritesFilesAndStillSignalsTheErrors(tmp_path: Path) -> None:
     rows = [*twoStations(), elementRow(**{"Station 2": "GibtsNicht_380"})]
     inputFile = writeExcel(rows, tmp_path / "input.xlsx")
 
-    exitCode = main([str(inputFile), "-o", str(tmp_path / "out"), "--no-color"])
+    exitCode = main([str(inputFile), "-o", str(tmp_path / "out"), "--legacy", "--no-color"])
 
     assert exitCode == EXIT_CONVERSION_ERROR
     assert (tmp_path / "out" / STATIONS_FILENAME).is_file()

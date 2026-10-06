@@ -47,10 +47,10 @@ def _validateShapeId(identifier: str) -> None:
 
 def mjapTargetFormat(target: TargetFormat) -> TargetFormat:
     if target.stationColumns or target.networkElementColumns:
-        raise ConversionError('--mjap requires the canonical column names; column renames are not allowed.')
+        raise ConversionError('MJAP exports require the canonical column names; column renames are not allowed.')
     types = {**ELEMENT_TYPES, **target.elementTypes}
     if types['TRA'] != 'Trafo' or any(v == 'Trafo' for k, v in types.items() if k != 'TRA'):
-        raise ConversionError("--mjap requires TRA -> Trafo; other element types cannot map to Trafo.")
+        raise ConversionError("MJAP exports require TRA -> Trafo; other element types cannot map to Trafo.")
     return TargetFormat(elementTypes=types)
 
 
@@ -185,13 +185,26 @@ def prepareCompanions(stations: pd.DataFrame, elements: pd.DataFrame,
 def writeMjapBundle(stations: pd.DataFrame, elements: pd.DataFrame,
                     outages: pd.DataFrame, projects: pd.DataFrame,
                     outputDir: Path, logger: logging.Logger, *, quoteAll: bool = False) -> tuple[Path, Path]:
-    """Stage the complete validated bundle; restore old files on publish errors.
+    """Publish all four validated tables together."""
+    return _writeMjapFrames({'Stationen': stations, 'Netzelemente': elements,
+                            'Freischaltungen': outages, 'Projekte': projects},
+                           outputDir, logger, quoteAll=quoteAll)
+
+
+def writeMjapNetwork(stations: pd.DataFrame, elements: pd.DataFrame,
+                     outputDir: Path, logger: logging.Logger, *, quoteAll: bool = False) -> tuple[Path, Path]:
+    """Publish only the two network tables, without inventing companion data."""
+    return _writeMjapFrames({'Stationen': stations, 'Netzelemente': elements},
+                           outputDir, logger, quoteAll=quoteAll)
+
+
+def _writeMjapFrames(frames: dict[str, pd.DataFrame], outputDir: Path,
+                     logger: logging.Logger, *, quoteAll: bool) -> tuple[Path, Path]:
+    """Stage the validated tables; restore old files on publish errors.
 
     This is not a transaction for concurrent readers or abrupt process death.
     Never run MJAP against the directory while an export is in progress.
     """
-    frames = {'Stationen': stations, 'Netzelemente': elements,
-              'Freischaltungen': outages, 'Projekte': projects}
     published = []
     try:
         outputDir.mkdir(parents=True, exist_ok=True)

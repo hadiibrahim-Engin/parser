@@ -116,3 +116,47 @@ Zusätzliche Prüfungen wiederholen:
 ```bash
 bash scripts/test_mjap.sh tests/testMultipod.py -o addopts= -q
 ```
+
+## Ergänzung vom 06.10.2026: Standardexport und KeyError MJAP-ID
+
+Der einfache CLI-Aufruf mit Excel-Pfad, `-o` und `--details` verwendete bisher
+allgemeine Leerzeichen-Platzhalter. MJAP behandelt solche T-/Y-Felder als belegte
+Referenzen (`notna()`), findet jedoch keine passenden Stationen. Bei gewöhnlichen
+Punkt-zu-Punkt-Zeilen blieb `sk_df` vollständig leer, ohne die Spalte `MJAP-ID`.
+Die folgende Attributerzeugung löste dann exakt den gemeldeten KeyError aus.
+Dieser Fehler wurde mit dem historischen Format am echten unveränderten Plugin
+reproduziert. Andere ungültige Referenzen können denselben Fehler auslösen; die
+konkreten Windows-Eingabedaten wurden nicht bereitgestellt.
+
+Der CLI-Standard erzeugt jetzt zwei MJAP-kompatible Netztabellen direkt aus Excel:
+UTF-8 mit BOM, Dezimalkomma, echte leere Topologiefelder, passende Mehrfachdatums-
+Texte und exakte Typzuordnung. Er validiert strikt und veröffentlicht beide Dateien
+mit Rücksetzung bei gewöhnlichen Schreib-/Dateiaustauschfehlern. Das historische
+Format ist ausdrücklich über `--legacy` verfügbar. Die Python-API behält den
+bisherigen Standard und wählt den sicheren Netzexport mit `mjapNetwork=True`.
+
+Der vollständige Assistent benötigt weiterhin echte, befüllte Freischaltungen und
+Projekte. Der Zwei-Tabellen-Export erfindet diese nicht und verändert vorhandene
+Begleitdateien im Ausgabeordner nicht. Der Modus `--mjap` bleibt das geprüfte
+Viererpaket mit zusätzlichen Quelltabellen.
+
+- **422 Parser-Tests bestanden**, zwei optionale QGIS-Testmodule übersprungen.
+- **74 Tests in der echten QGIS-/MJAP-Umgebung bestanden**, darunter vier
+  vollständige Assistentenszenarien, die exakte Fehlerreproduktion und der
+  korrigierte einfache Aufruf für normale Leitungen und Dreibeine.
+- Die Netztabellen des einfachen Aufrufs sind bytegenau identisch mit denen des
+  geprüften vollständigen Pakets, sowohl mit pandas 3.0.5 als auch pandas 2.2.3.
+- Neue Tests decken strikte Fehlereingaben, Erhalt vorhandener Begleitdateien,
+  Zweierpaket-Rücksetzung und die tatsächliche MJAP-Shape-/Attributerzeugung ab.
+- Das Plugin wurde nicht verändert. Der reale Windows-Export muss nach der
+  Parser-Aktualisierung neu erzeugt und mit den eigenen Daten geprüft werden.
+
+```powershell
+python converter.py "C:\Daten\input.xlsx" -o "C:\Daten\output" --details
+```
+
+Prüfungen wiederholen:
+
+```bash
+bash scripts/test_mjap.sh tests/testMultipod.py tests/testMjapNetwork.py -o addopts= -q
+```

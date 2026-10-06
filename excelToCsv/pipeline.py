@@ -179,30 +179,51 @@ def runConversion(
     emptyPlaceholder: str = DEFAULT_EMPTY_PLACEHOLDER,
     targetFormatPath: Path | None = None,
     mjap: bool = False,
+    mjapNetwork: bool = False,
     outagesPath: Path | None = None,
     projectsPath: Path | None = None,
 ) -> ConversionResult:
-    """Full run: read Excel, convert, validate, write the CSV files."""
+    """Read Excel and publish the selected CSV format.
+
+    The Python API retains its historical default. The CLI explicitly selects
+    ``mjapNetwork=True`` for the safe, two-table network export; ``mjap=True``
+    selects the complete four-table bundle with genuine companion inputs.
+    """
     targetFormat = loadTargetFormat(targetFormatPath, logger)
+    if mjap and mjapNetwork:
+        from excelToCsv.errors import ConversionError
+        raise ConversionError('Choose either the MJAP network export or the four-table bundle.')
     if not mjap and (outagesPath is not None or projectsPath is not None):
         from excelToCsv.errors import ConversionError
         raise ConversionError('--freischaltungen and --projekte require --mjap.')
-    if mjap:
-        from excelToCsv.mjap import mjapTargetFormat, prepareMjapFrames, prepareCompanions, writeMjapBundle
+    if mjap or mjapNetwork:
+        from excelToCsv.mjap import (mjapTargetFormat, prepareMjapFrames, prepareCompanions,
+                                    writeMjapBundle, writeMjapNetwork)
         targetFormat = mjapTargetFormat(targetFormat)
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
-    result = convertTable(table, logger, strict=strict or mjap)
-    if mjap:
+    result = convertTable(table, logger, strict=strict or mjap or mjapNetwork)
+    if mjap or mjapNetwork:
         if any(issue.problem == 'Network element has no usable station reference.' for _, issue in result.issues):
             from excelToCsv.errors import ConversionError
             raise ConversionError('MJAP export cannot discard network elements with missing station references.', issues=result.issues)
         result.stations, result.networkElements = prepareMjapFrames(result.stations, result.networkElements)
-        outages, projects = prepareCompanions(result.stations, result.networkElements, outagesPath, projectsPath)
+        if mjap:
+            outages, projects = prepareCompanions(result.stations, result.networkElements, outagesPath, projectsPath)
     if mjap:
         result.stationsPath, result.networkElementsPath = writeMjapBundle(
             targetFormat.applyToStations(result.stations),
             targetFormat.applyToNetworkElements(result.networkElements), outages, projects,
             outputDir, logger, quoteAll=quoteAll,
+        )
+    elif mjapNetwork:
+        result.stationsPath, result.networkElementsPath = writeMjapNetwork(
+            targetFormat.applyToStations(result.stations),
+            targetFormat.applyToNetworkElements(result.networkElements),
+            outputDir, logger, quoteAll=quoteAll,
+        )
+        logger.info(
+            'MJAP network export: two CSVs generated from Excel. The complete wizard '
+            'also needs nonempty Freischaltungen.csv and Projekte.csv; these were not generated.'
         )
     else:
         result.stationsPath, result.networkElementsPath = writeCsvFiles(
