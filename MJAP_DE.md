@@ -172,6 +172,22 @@ Quellen: [Natural Earth](https://www.naturalearthdata.com/downloads/50m-cultural
 [Kachelregeln](https://operations.osmfoundation.org/policies/tiles/).
 Die heruntergeladenen Geometrien und die Herkunft sind in `excelToCsv/maps` enthalten.
 
+## Excel-Dreibeine
+
+Excel bleibt die Eingabe. Drei Leitungszeilen mit demselben `Multipod` und vier
+SUB-Zeilen (A, B, C, X) werden automatisch zu genau drei Netzelementzeilen:
+Die erste enthält A, B, T-1=C und Y1=X; die zweite A–C ohne B; die dritte B–C
+ohne A. Der Y-Knoten steht nur in der ersten Zeile, T-2/Y2 bleiben leer.
+Die Excel-Reihenfolge entscheidet über A/B/C und den vollständigen Eintrag.
+Die IDs und übrigen Attribute bleiben an ihrer Quellzeile; die Paar-Namen
+bekommen den Zusatz `(ohne Bein <Roh-Stations-ID>)`.
+
+MJAP erzeugt drei Y-Beine und zwei direkte Paarlinien, insgesamt fünf Features.
+Eine Schaltung der ersten ID betrifft das vollständige Y. Ungültige oder
+unvollständige Dreibein-Gruppen werden im MJAP-Modus vor dem Schreiben abgewiesen.
+Vier Beine am selben X werden nicht automatisch in eine Doppel-Y-Topologie
+übersetzt. [Excel-Eingabe, CSVs und Prüfbericht](docs/beispiel/dreibein/README_DE.md).
+
 ## Tests
 
 ```bash

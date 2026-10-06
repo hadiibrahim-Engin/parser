@@ -1,283 +1,169 @@
-"""Tests for the ``Multipod`` reference of three-legged lines."""
-
-from __future__ import annotations
-
+"""Excel multipods: one complete Y record and two pair records, never four."""
 import logging
 
+import pandas as pd
 import pytest
-from conftest import RecordingHandler, convertRows, elementRow, stationRow
-
+from conftest import convertRows, elementRow, stationRow, writeExcel
 from excelToCsv.errors import ConversionError
+from excelToCsv.pipeline import runConversion
+from excelToCsv.mjap import prepareMjapFrames
 
-MULTIPOD = "Multipod"
-MAP_MULTIPOD = "Map Multipod"
-
-VIRTUAL_STATION = "XStationK_380"
-
-
-def virtualStation(**overrides: object) -> dict[str, object]:
-    """The virtual SUB row at which the legs of a multipod line meet."""
-    return stationRow(
-        **{
-            "ELEMENT ID": VIRTUAL_STATION,
-            "TSO": "50Hertz",
-            "LONG-NAME": "X-Knoten StationK",
-            "Latitude": "51.123456",
-            "Longitude": "11.654321",
-            "UCTE CODE": "XSTATK1",
-            **overrides,
-        }
-    )
+VIRTUAL_STATION = 'XStationK_380'
 
 
-def legStations() -> list[dict[str, object]]:
-    """Three real stations, one per leg."""
-    return [
-        stationRow(
-            **{
-                "ELEMENT ID": f"Station{suffix}_380",
-                "LONG-NAME": f"Umspannwerk {suffix}",
-                "Latitude": "52.459373",
-                "Longitude": "13.361402",
-                "UCTE CODE": f"DSTAT{suffix}",
-            }
-        )
-        for suffix in ("A", "B", "C")
-    ]
+def multipodRows(node=VIRTUAL_STATION):
+    stations = [stationRow(**{'ELEMENT ID': node, 'TSO': '50Hertz',
+                             'Latitude': '51.1', 'Longitude': '11.6'})]
+    stations += [stationRow(**{'ELEMENT ID': f'Station{x}_380',
+                              'LONG-NAME': f'Umspannwerk {x}',
+                              'Latitude': str(52 + i), 'Longitude': str(10 + i)})
+                 for i, x in enumerate('ABC')]
+    legs = [elementRow(**{'ELEMENT ID': f'LINE_00{i + 1}', 'LONG-NAME': 'Leitung xy',
+                         'Station 1': node, 'Station 2': f'Station{x}_380',
+                         'Multipod': node, 'UCTE CODE': f'DL00{i + 1}'})
+            for i, x in enumerate('ABC')]
+    return stations + legs
 
 
-def leg(number: int, station: str, **overrides: object) -> dict[str, object]:
-    """One leg of the multipod line, running from the virtual node to a station."""
-    return elementRow(
-        **{
-            "ELEMENT ID": f"LINE_00{number}",
-            "LONG-NAME": f"Bein {number}",
-            "ELEMENT-TYPE": "LINE",
-            "Station 1": VIRTUAL_STATION,
-            "Station 2": station,
-            "UCTE CODE": f"DL00{number}",
-            MULTIPOD: VIRTUAL_STATION,
-            **overrides,
-        }
-    )
+def testThreeLegsBecomeOneCompleteYAndTwoPairs(logger):
+    result = convertRows(multipodRows(), logger)
+    elements = result.networkElements
+    assert len(result.stations) == 4 and len(elements) == 3
+    assert elements['MJAP-ID'].tolist() == [f'Amprion_LINE_00{i}' for i in (1, 2, 3)]
+    for column in ('Station Anfang', 'Station Anfang:MJAP-ID'):
+        assert elements[column].tolist() == ['Amprion_StationA_380', 'Amprion_StationA_380', 'Amprion_StationB_380']
+    for column in ('Station Ende', 'Station Ende:MJAP-ID'):
+        assert elements[column].tolist() == ['Amprion_StationB_380', 'Amprion_StationC_380', 'Amprion_StationC_380']
+    for column in ('Station T-1', 'Station T-1:MJAP-ID'):
+        assert elements[column].tolist() == ['Amprion_StationC_380', '', '']
+    assert elements['Y-Knoten-1'].tolist() == [VIRTUAL_STATION, '', '']
+    assert elements['Y-Knoten-1: MJAP-ID'].tolist() == ['50Hertz_' + VIRTUAL_STATION, '', '']
+    for column in ('Station T-2', 'Station T-2:MJAP-ID', 'Y-Knoten-2', 'Y-Knoten-2: MJAP-ID'):
+        assert elements[column].eq('').all()
+    for column in ('Stromkreisname - Langname', 'Stromkreisname - Kurzname'):
+        assert elements[column].tolist() == ['Leitung xy', 'Leitung xy (ohne Bein StationB_380)',
+                                            'Leitung xy (ohne Bein StationA_380)']
+    assert result.warningCount == 0
 
 
-# --------------------------------------------------------------------------- #
-# Case 1: without Multipod the Y node columns stay empty
-# --------------------------------------------------------------------------- #
-
-
-def testLineWithoutMultipodLeavesYNodesEmpty(logger: logging.Logger) -> None:
-    rows = [virtualStation(), *legStations(), leg(1, "StationA_380", **{MULTIPOD: ""})]
-    element = convertRows(rows, logger).networkElements.iloc[0]
-
-    assert element["Y-Knoten-1"] == ""
-    assert element["Y-Knoten-1: MJAP-ID"] == ""
-    assert element["Y-Knoten-2"] == ""
-    assert element["Y-Knoten-2: MJAP-ID"] == ""
-
-
-def testMultipodColumnMayBeAbsentEntirely(logger: logging.Logger) -> None:
-    """A workbook without the optional column still converts."""
-    rows = [
-        virtualStation(),
-        *legStations(),
-        elementRow(
-            **{"Station 1": VIRTUAL_STATION, "Station 2": "StationA_380"}
-        ),
-    ]
-    element = convertRows(rows, logger).networkElements.iloc[0]
-    assert element["Y-Knoten-1"] == ""
-    assert element["Y-Knoten-1: MJAP-ID"] == ""
-
-
-# --------------------------------------------------------------------------- #
-# Cases 2-5: a valid Multipod populates the Y node columns
-# --------------------------------------------------------------------------- #
-
-
-def testValidMultipodPopulatesYNode(logger: logging.Logger) -> None:
-    rows = [virtualStation(), *legStations(), leg(1, "StationA_380")]
-    result = convertRows(rows, logger)
-    element = result.networkElements.iloc[0]
-
-    assert element["Y-Knoten-1"] == VIRTUAL_STATION
-    assert element["Y-Knoten-1: MJAP-ID"] == f"50Hertz_{VIRTUAL_STATION}"
-    assert result.warningCount == 0, "a well-formed virtual station warns about nothing"
-
-
-def testStationColumnsAreUnaffectedByMultipod(logger: logging.Logger) -> None:
-    """Station Anfang/Ende keep their own mapping."""
-    rows = [virtualStation(), *legStations(), leg(1, "StationA_380")]
-    element = convertRows(rows, logger).networkElements.iloc[0]
-
-    assert element["Station Anfang"] == f"50Hertz_{VIRTUAL_STATION}"
-    assert element["Station Ende"] == "Amprion_StationA_380"
-    assert element["Station Anfang:MJAP-ID"] == f"50Hertz_{VIRTUAL_STATION}"
-    assert element["Station Ende:MJAP-ID"] == "Amprion_StationA_380"
-
-
-def testMultipodValueIsTrimmed(logger: logging.Logger) -> None:
-    rows = [
-        virtualStation(),
-        *legStations(),
-        leg(1, "StationA_380", **{MULTIPOD: f"  {VIRTUAL_STATION} "}),
-    ]
-    element = convertRows(rows, logger).networkElements.iloc[0]
-    assert element["Y-Knoten-1"] == VIRTUAL_STATION
-
-
-def testYKnoten2StaysEmpty(logger: logging.Logger) -> None:
-    """No business rule defines the second Y node yet."""
-    rows = [virtualStation(), *legStations(), leg(1, "StationA_380")]
-    element = convertRows(rows, logger).networkElements.iloc[0]
-
-    assert element["Y-Knoten-2"] == ""
-    assert element["Y-Knoten-2: MJAP-ID"] == ""
-
-
-# --------------------------------------------------------------------------- #
-# Case 6: the three legs stay three separate records
-# --------------------------------------------------------------------------- #
-
-
-def testThreeLegsStayThreeSeparateRecords(logger: logging.Logger) -> None:
-    rows = [
-        virtualStation(),
-        *legStations(),
-        leg(1, "StationA_380"),
-        leg(2, "StationB_380"),
-        leg(3, "StationC_380"),
-    ]
+def testExcelOrderSelectsFullRecordAndAttributesStayWithSource(logger):
+    rows = multipodRows()
+    for i, row in enumerate(rows[-3:]):
+        row['STARTLIFETIME'] = f'202{i + 5}-05-09'
+    rows = rows[:4] + [rows[6], rows[4], rows[5]]
     elements = convertRows(rows, logger).networkElements
-
-    assert len(elements) == 3, "the legs must not be aggregated into one line"
-    assert list(elements["MJAP-ID"]) == [
-        "Amprion_LINE_001",
-        "Amprion_LINE_002",
-        "Amprion_LINE_003",
-    ]
-    assert list(elements["Station Ende"]) == [
-        "Amprion_StationA_380",
-        "Amprion_StationB_380",
-        "Amprion_StationC_380",
-    ]
-    # All three share the same virtual node.
-    assert set(elements["Y-Knoten-1"]) == {VIRTUAL_STATION}
-    assert set(elements["Y-Knoten-1: MJAP-ID"]) == {f"50Hertz_{VIRTUAL_STATION}"}
+    assert elements['MJAP-ID'].tolist() == ['Amprion_LINE_003', 'Amprion_LINE_001', 'Amprion_LINE_002']
+    assert elements.iloc[0]['Station T-1:MJAP-ID'] == 'Amprion_StationB_380'
+    assert elements['IBN'].tolist() == ['09.05.2027', '09.05.2025', '09.05.2026']
+    assert elements['ID-UCTE'].tolist() == ['DL003', 'DL001', 'DL002']
 
 
-# --------------------------------------------------------------------------- #
-# Case 7: unknown reference is fatal
-# --------------------------------------------------------------------------- #
+def testReversedLegDirectionsHaveSameTopology(logger):
+    rows = multipodRows()
+    expected = convertRows(rows, logger).networkElements
+    for row in rows[-3:]:
+        row['Station 1'], row['Station 2'] = row['Station 2'], row['Station 1']
+    assert convertRows(rows, logger).networkElements.equals(expected)
 
 
-def testUnknownMultipodReferenceIsFatal(
-    logger: logging.Logger, logCapture: RecordingHandler
-) -> None:
-    rows = [
-        virtualStation(),
-        *legStations(),
-        leg(1, "StationA_380", **{MULTIPOD: "XDoesNotExist_380"}),
-    ]
-    with pytest.raises(ConversionError):
-        convertRows(rows, logger)
-
-    errors = logCapture.text(logging.ERROR)
-    assert "Multipod references an unknown virtual station." in errors
-    assert "Field: Multipod" in errors
-    assert "Value: XDoesNotExist_380" in errors
-    assert "ELEMENT ID: LINE_001" in errors
-    assert "ELEMENT-TYPE: LINE" in errors
-    assert "Expected: Every Multipod value must reference an existing SUB ELEMENT ID." in errors
+@pytest.mark.parametrize('node', ['StationK_380', 'StationK'])
+def testExistingNodeIsNeverRenamed(logger, logCapture, node):
+    result = convertRows(multipodRows(node), logger)
+    assert result.networkElements.iloc[0]['Y-Knoten-1'] == node
+    assert 'does not follow the expected virtual-station X naming convention' in logCapture.text(logging.WARNING)
 
 
-def testMultipodPointingAtANetworkElementIsFatal(logger: logging.Logger) -> None:
-    """Only SUB rows are valid targets, not another network element."""
-    rows = [
-        virtualStation(),
-        *legStations(),
-        leg(1, "StationA_380"),
-        leg(2, "StationB_380", **{MULTIPOD: "LINE_001"}),
-    ]
-    with pytest.raises(ConversionError):
-        convertRows(rows, logger)
+@pytest.mark.parametrize('count', [1, 2, 4, 6])
+def testIncompleteOrAmbiguousGroupsFail(logger, count):
+    rows = multipodRows()
+    legs = rows[4:]
+    while len(legs) < count:
+        legs.append({**legs[0], 'ELEMENT ID': f'EXTRA_{len(legs)}'})
+    with pytest.raises(ConversionError, match='validation'):
+        convertRows(rows[:4] + legs[:count], logger)
 
 
-# --------------------------------------------------------------------------- #
-# Case 8: existing station without the X convention only warns
-# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize('defect', ['duplicate-end', 'node-not-end', 'loop', 'mixed-voltage', 'mixed-type', 'missing-end'])
+def testInvalidTopologyFails(logger, logCapture, defect):
+    rows = multipodRows()
+    if defect == 'duplicate-end': rows[-1]['Station 2'] = 'StationA_380'
+    if defect == 'node-not-end': rows[-1]['Station 1'] = 'StationB_380'
+    if defect == 'loop': rows[-1]['Station 2'] = VIRTUAL_STATION
+    if defect == 'mixed-voltage': rows[-1]['VOLTAGE-LEVEL'] = '220'
+    if defect == 'mixed-type': rows[-1]['ELEMENT-TYPE'] = 'TRA'
+    if defect == 'missing-end': rows[-1]['Station 2'] = 'Missing_380'
+    with pytest.raises(ConversionError): convertRows(rows, logger)
+    assert 'Multipod must describe exactly three unambiguous line legs.' in logCapture.text(logging.ERROR)
 
 
-def testMultipodWithoutXConventionOnlyWarns(
-    logger: logging.Logger, logCapture: RecordingHandler
-) -> None:
-    rows = [
-        virtualStation(**{"ELEMENT ID": "StationK_380"}),
-        *legStations(),
-        leg(1, "StationA_380", **{"Station 1": "StationK_380", MULTIPOD: "StationK_380"}),
-    ]
+def testUnknownMultipodReferenceFails(logger, logCapture):
+    rows = multipodRows()
+    for row in rows[-3:]: row['Multipod'] = 'XDoesNotExist_380'
+    with pytest.raises(ConversionError): convertRows(rows, logger)
+    assert 'Multipod references an unknown virtual station.' in logCapture.text(logging.ERROR)
+
+
+@pytest.mark.parametrize('omit', [False, True])
+def testWithoutMultipodPlainConnectionsStayUnchanged(logger, omit):
+    rows = multipodRows()
+    for row in rows[-3:]:
+        if omit: row.pop('Multipod')
+        else: row['Multipod'] = ''
+    elements = convertRows(rows, logger).networkElements
+    assert elements['Station Anfang:MJAP-ID'].eq('50Hertz_' + VIRTUAL_STATION).all()
+    assert elements['Y-Knoten-1'].eq('').all()
+    assert elements['Station T-1:MJAP-ID'].eq('').all()
+    assert elements['Stromkreisname - Langname'].eq('Leitung xy').all()
+
+
+def testMapMultipodIsIgnored(logger):
+    rows = multipodRows()
+    expected = convertRows(rows, logger)
+    for row in rows: row['Map Multipod'] = 'XDoesNotExist_380'
+    actual = convertRows(rows, logger)
+    assert actual.networkElements.equals(expected.networkElements)
+    assert actual.stations.equals(expected.stations)
+
+
+def testSeparateNodesDoNotMixGroups(logger):
+    first = multipodRows()
+    second = multipodRows('XOther_380')
+    for row in second[1:]:
+        row['ELEMENT ID'] = 'Other' + row['ELEMENT ID']
+        if row['ELEMENT-TYPE'] == 'LINE': row['Station 2'] = 'Other' + row['Station 2']
+    result = convertRows(first + second, logger)
+    assert len(result.networkElements) == 6
+    assert result.networkElements['Y-Knoten-1'].tolist() == [VIRTUAL_STATION, '', '', 'XOther_380', '', '']
+
+
+def testExcelToCsvHasExactlyOneYAndNoManualCsvEditing(tmp_path, logger):
+    workbook = writeExcel(multipodRows(), tmp_path / 'input.xlsx')
+    outages, projects = tmp_path / 'outages.csv', tmp_path / 'projects.csv'
+    pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_LINE_001',
+                   'interne ID': 'FS_1', 'von': '01.06.2028', 'bis': '02.06.2028', 'Projekt': 'Demo'}]).to_csv(outages, index=False)
+    pd.DataFrame([{'Projektname': 'Demo', 'betroffener Standort': 'Amprion_StationA_380',
+                   'Umsetzungzeitraum von': '01.01.2028', 'Umsetzungzeitraum bis': '31.12.2028'}]).to_csv(projects, index=False)
+    result = runConversion(workbook, tmp_path / 'csv', logger, mjap=True,
+                           outagesPath=outages, projectsPath=projects)
+    elements = pd.read_csv(result.networkElementsPath, encoding='utf-8-sig')
+    assert len(elements) == 3
+    assert elements['Y-Knoten-1: MJAP-ID'].notna().tolist() == [True, False, False]
+    assert elements['Station T-1:MJAP-ID'].notna().tolist() == [True, False, False]
+    assert elements['Station T-2:MJAP-ID'].isna().all()
+    assert elements['Stromkreisname - Langname'].iloc[1] == 'Leitung xy (ohne Bein StationB_380)'
+    assert set(pd.read_csv(tmp_path / 'csv/Freischaltungen.csv')['Netzelement:MJAP-ID']) <= set(elements['MJAP-ID'])
+
+
+def testYLegZeroLengthFailsBeforePublishing(logger):
+    rows = multipodRows()
+    rows[0]['Latitude'], rows[0]['Longitude'] = rows[3]['Latitude'], rows[3]['Longitude']
     result = convertRows(rows, logger)
-
-    warnings = logCapture.text(logging.WARNING)
-    assert "does not follow the expected virtual-station X naming convention" in warnings
-    assert "Value: StationK_380" in warnings
-    assert "Expected: Pattern X<StationName>_<VoltageLevel>" in warnings
-
-    element = result.networkElements.iloc[0]
-    assert element["Y-Knoten-1"] == "StationK_380", "the reference is never renamed"
-    assert element["Y-Knoten-1: MJAP-ID"] == "50Hertz_StationK_380"
+    with pytest.raises(ConversionError, match='zero-length'):
+        prepareMjapFrames(result.stations, result.networkElements)
 
 
-def testConverterNeverInventsAVirtualStation(
-    logger: logging.Logger, logCapture: RecordingHandler
-) -> None:
-    """An old-style ``StationK`` is not rebuilt into ``XStationK_380``."""
-    rows = [
-        virtualStation(**{"ELEMENT ID": "StationK"}),
-        *legStations(),
-        leg(1, "StationA_380", **{"Station 1": "StationK", MULTIPOD: "StationK"}),
-    ]
-    result = convertRows(rows, logger)
-
-    assert result.networkElements.iloc[0]["Y-Knoten-1"] == "StationK"
-    assert "does not follow the expected virtual-station X naming convention" in logCapture.text(
-        logging.WARNING
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Case 9: Map Multipod remains irrelevant
-# --------------------------------------------------------------------------- #
-
-
-def testMapMultipodDoesNotInfluenceAnything(logger: logging.Logger) -> None:
-    withoutColumn = convertRows(
-        [virtualStation(), *legStations(), leg(1, "StationA_380")], logger
-    )
-    withColumn = convertRows(
-        [
-            virtualStation(**{MAP_MULTIPOD: "whatever"}),
-            *legStations(),
-            leg(1, "StationA_380", **{MAP_MULTIPOD: "XSomethingElse_220"}),
-        ],
-        logger,
-    )
-
-    assert withColumn.networkElements.equals(withoutColumn.networkElements)
-    assert withColumn.stations.equals(withoutColumn.stations)
-
-
-def testMapMultipodIsNotMistakenForMultipod(
-    logger: logging.Logger, logCapture: RecordingHandler
-) -> None:
-    """A dangling ``Map Multipod`` must not trigger the reference check."""
-    rows = [
-        virtualStation(),
-        *legStations(),
-        leg(1, "StationA_380", **{MULTIPOD: "", MAP_MULTIPOD: "XDoesNotExist_380"}),
-    ]
-    result = convertRows(rows, logger)
-
-    assert result.networkElements.iloc[0]["Y-Knoten-1"] == ""
-    assert "Multipod references an unknown" not in logCapture.text(logging.ERROR)
+def testGeneratedYShapeIdsCannotCollide(logger):
+    result = convertRows(multipodRows(), logger)
+    result.networkElements.loc[1, 'MJAP-ID'] = 'Amprion_LINE_001_Y1'
+    with pytest.raises(ConversionError, match='shape-ID collision'):
+        prepareMjapFrames(result.stations, result.networkElements)

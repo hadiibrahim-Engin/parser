@@ -250,88 +250,66 @@ coordinates.
 
 ## Multipod
 
-A three-legged line is stored as **three separate rows** that all reference the same
-virtual station in the `Multipod` column. That reference is what ties the legs together.
+**Excel is the input.** A three-legged line needs four `SUB` rows (A, B, C,
+virtual node X) and three line rows. Each line connects X to one distinct outer
+station and carries X's raw `ELEMENT ID` in `Multipod`. Either endpoint direction
+is accepted. X must already exist with its own coordinates; nothing is invented.
 
-```
-virtual station: XStationK_380
+Example Excel line rows, in this order:
 
-LINE_001  XStationK_380 <-> StationA_380   Multipod = XStationK_380
-LINE_002  XStationK_380 <-> StationB_380   Multipod = XStationK_380
-LINE_003  XStationK_380 <-> StationC_380   Multipod = XStationK_380
-```
+| ELEMENT ID | LONG-NAME | Station 1 | Station 2 | Multipod |
+| --- | --- | --- | --- | --- |
+| LINE_001 | Leitung xy | XStationK_380 | StationA_380 | XStationK_380 |
+| LINE_002 | Leitung xy | XStationK_380 | StationB_380 | XStationK_380 |
+| LINE_003 | Leitung xy | XStationK_380 | StationC_380 | XStationK_380 |
+
+Three Excel line rows become **exactly three CSV records**, retaining their IDs
+and per-row dates, owners and other attributes. Excel row order assigns A/B/C:
+
+| Source row | Start | End | T-1 | Y1 | Name |
+| --- | --- | --- | --- | --- | --- |
+| First | A | B | C | X | Its original LONG-NAME |
+| Second | A | C | empty | empty | Its LONG-NAME + ` (ohne Bein StationB_380)` |
+| Third | B | C | empty | empty | Its LONG-NAME + ` (ohne Bein StationA_380)` |
+
+Only the first record has `Station T-1` / `Station T-1:MJAP-ID` and
+`Y-Knoten-1` / `Y-Knoten-1: MJAP-ID`. Station columns contain the resolved full
+MJAP-IDs; plain Y1 contains the raw node ID. T-2 and Y2 remain empty throughout.
+Both long and short circuit names receive the suffixes. The virtual node occurs
+once in `Stationen.csv`; there is no fourth summary record in `Netzelemente.csv`.
+
+The unchanged MJAP plugin creates **five line features**: A-X, B-X, C-X for the
+full Y record, plus direct A-C and B-C for the pair records. Pair lines do not
+follow X. An outage of the first retained element ID affects all three Y legs;
+the other IDs affect their respective pair. Retained source IDs therefore have
+new connection semantics; Excel order and per-leg attributes need deliberate
+business review.
 
 ```mermaid
 flowchart LR
-    SA["StationA_380"] --- L1["LINE_001"] --- X(["XStationK_380<br/>virtual SUB row"])
-    SB["StationB_380"] --- L2["LINE_002"] --- X
-    SC["StationC_380"] --- L3["LINE_003"] --- X
+    E[Excel: X-A / X-B / X-C] --> Y[First CSV: A / B / T1=C / Y1=X]
+    E --> P2[Second CSV: A-C without B]
+    E --> P3[Third CSV: B-C without A]
+    Y --> G[Three Y legs in MJAP]
+    P2 --> L2[One direct line]
+    P3 --> L3[One direct line]
 ```
 
-The converter **does not aggregate** the legs. Three input rows stay three rows in
-`Netzelemente.csv`; `Multipod` only marks and references the shared virtual node.
+Groups are keyed by the normalized `Multipod` reference and require exactly
+three distinct outer SUB stations, the same voltage and the same line type
+(`LINE`, `TIE` or `DCL`). Incomplete groups, repeated endpoints, several circuits
+sharing one node, and four-leg groups are reported as errors. `--strict` and
+`--mjap` abort before writing; the default lenient mode logs the errors.
+A four-leg star at one node cannot be inferred as MJAP's double-Y, which needs
+two virtual nodes. `Station T-2` alone is insufficient.
 
-### Mapping
+A missing referenced SUB node is an error. An existing node without the capital
+X naming convention only warns and is kept unchanged. An empty or absent
+`Multipod` leaves ordinary point-to-point conversion unchanged. `Map Multipod`
+is ignored.
 
-| Output column | Value |
-| --- | --- |
-| `Y-Knoten-1` | The `Multipod` value, trimmed and otherwise unchanged |
-| `Y-Knoten-1: MJAP-ID` | MJAP-ID of the referenced virtual station |
-| `Y-Knoten-2`, `Y-Knoten-2: MJAP-ID` | Empty — no business rule defined yet |
-
-An empty `Multipod` leaves all four fields empty. The column itself may be absent
-from the workbook entirely.
-
-`Y-Knoten-1` and `Y-Knoten-1: MJAP-ID` follow the same split as `Station Anfang` /
-`Station Anfang:MJAP-ID`: the plain column keeps the referenced `ELEMENT ID`, the
-`:MJAP-ID` column carries the resolved `<owner>_<ELEMENT ID>`.
-
-### Validation
-
-```mermaid
-flowchart TD
-    A{"Multipod populated?"} -->|no| B["Y node columns stay empty"]
-    A -->|yes| C{"SUB row with this ELEMENT ID exists?"}
-    C -->|no| D["Fatal: Multipod references an unknown virtual station"]
-    C -->|yes| E{"Follows X-name-voltage convention?"}
-    E -->|no| F["WARNING: naming convention not met, conversion continues"]
-    E -->|yes| G["Accepted silently"]
-    F --> H["Populate Y-Knoten-1 and Y-Knoten-1: MJAP-ID"]
-    G --> H
-```
-
-A dangling reference is fatal, because the Y node columns would otherwise carry a
-reference to a station that does not exist:
-
-```
-ERROR    validate.py:157   Validation failed.
-         Row: 133
-         ELEMENT ID: LINE_002
-         ELEMENT-TYPE: LINE
-         Field: Multipod
-         Value: XDoesNotExist_380
-         Problem: Multipod references an unknown virtual station.
-         Expected: Every Multipod value must reference an existing SUB ELEMENT ID.
-```
-
-A station that **exists** but breaks the naming convention only warns — the reference
-itself is intact:
-
-```
-WARNING  validate.py:169   Tolerable issue.
-         Field: Multipod
-         Value: StationK_380
-         Problem: Multipod references a valid SUB station, but its ELEMENT ID does not
-                  follow the expected virtual-station X naming convention.
-         Expected: Pattern X<StationName>_<VoltageLevel>, e.g. XStationK_380.
-         Action: Keeping the reference unchanged and continuing.
-```
-
-**Nothing is renamed or invented.** Legacy data such as `StationK` is not rebuilt into
-`XStationK_380`, no voltage level is appended, and no virtual station is ever created.
-Bringing the input onto the uniform form happens outside this converter.
-
-`Map Multipod` stays irrelevant and influences no conversion logic whatsoever.
+A replayable [Excel-first three-leg example](docs/beispiel/dreibein/README_DE.md)
+includes the workbook, generated CSVs and actual full-wizard report.
 
 ---
 
@@ -665,7 +643,7 @@ works purely on data and can be tested without an Excel file at all.
 | --- | --- | --- | --- |
 | 1 | `Eigentümer` | `TSO` | trimmed text |
 | 2 | `MJAP-ID` | `TSO`, `ELEMENT ID` | `<Eigentümer>_<ELEMENT ID>` |
-| 3 | `Stromkreisname - Langname` | `LONG-NAME` | trimmed text |
+| 3 | `Stromkreisname - Langname` | `LONG-NAME` | trimmed text; pair rows add excluded-leg suffix |
 | 4 | `Region` | — | empty (`CCR/ROA` is explicitly **not** used) |
 | 5 | `Element Typ` | `ELEMENT-TYPE` | uppercase |
 | 6 | `Spannung` | `VOLTAGE-LEVEL` | normalized **text**, e.g. `380/110`, `DC` |
@@ -674,10 +652,11 @@ works purely on data and can be tested without an Excel file at all.
 | 9 | `ABN` | `ENDLIFETIME` | `DD.MM.YYYY` |
 | 10 | `IBN - Mehrfach` | — | empty |
 | 11 | `ABN - Mehrfach` | — | empty |
-| 12 | `Station Anfang` | `Station 1` | **MJAP-ID** of the referenced station, or `NaN` |
-| 13 | `Station Ende` | `Station 2` | **MJAP-ID** of the referenced station, or `NaN` |
-| 14–15 | `Station T-1`, `Station T-2` | — | empty |
-| 16 | `Y-Knoten-1` | `Multipod` | The referenced virtual station, unchanged; empty when `Multipod` is empty |
+| 12 | `Station Anfang` | `Station 1` | **MJAP-ID** of the referenced station, or `NaN`; Multipod groups remap endpoints as above |
+| 13 | `Station Ende` | `Station 2` | **MJAP-ID** of the referenced station, or `NaN`; Multipod groups remap endpoints as above |
+| 14 | `Station T-1` | Multipod group | third outer station, only in first Y record |
+| 15 | `Station T-2` | — | empty |
+| 16 | `Y-Knoten-1` | `Multipod` | Referenced raw virtual-station ID, only in first complete Y record |
 | 17 | `Y-Knoten-2` | — | empty (no rule defined yet) |
 | 18 | `Stromkreisname - Kurzname` | `LONG-NAME` | same as long name for now |
 | 19 | `Stromkreisname - OPC-Name` | — | empty |
@@ -688,8 +667,9 @@ works purely on data and can be tested without an Excel file at all.
 | 24 | `ID` | — | empty (no defined source) |
 | 25 | `Station Anfang:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | identical to `Station Anfang` |
 | 26 | `Station Ende:MJAP-ID` | referenced station's `TSO`, `ELEMENT ID` | identical to `Station Ende` |
-| 27–28 | `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID` | — | empty |
-| 29 | `Y-Knoten-1: MJAP-ID` | `Multipod` | MJAP-ID of the referenced virtual station |
+| 27 | `Station T-1:MJAP-ID` | Multipod group | resolved third outer station, only in first Y record |
+| 28 | `Station T-2:MJAP-ID` | — | empty |
+| 29 | `Y-Knoten-1: MJAP-ID` | `Multipod` | resolved virtual station, only in first complete Y record |
 | 30 | `Y-Knoten-2: MJAP-ID` | — | empty |
 
 ### Ignored input columns
@@ -898,7 +878,7 @@ TennetD,TennetD_Xb_380,X-Knoten b,51,6.5,"[""380""]",,,...
 ### Columns that are empty in every row
 
 Fifteen output columns have no defined source and therefore stay empty in every row —
-`Region`, `ID`, `IBN - Mehrfach`, `Station T-1`, `Y-Knoten-2` and friends. A column can
+`Region`, `ID`, `IBN - Mehrfach`, `Station T-2`, `Y-Knoten-2` and friends. A column can
 also end up empty by accident, for instance `IBN` in a file where no lifetime dates are
 maintained.
 
@@ -952,7 +932,7 @@ Two boundaries keep the change small:
 | `tests/testEmptyPlaceholder.py` | All-empty columns stay readable as text, populated columns untouched |
 | `tests/testLenientMode.py` | Errors do not stop the run, dropped unknown types, `--strict` behaviour |
 | `tests/testIssueReport.py` | `--issue-file` on aborted and clean runs, CSV/text formats, row ordering, BOM |
-| `tests/testMultipod.py` | Y nodes from `Multipod`, three legs stay three rows, unknown reference, naming warning, `Map Multipod` irrelevance |
+| `tests/testMultipod.py` | Excel-first Y + two pair records, row order, ID/date retention, bad groups, geometry checks, unknown reference, `Map Multipod` irrelevance |
 | `tests/testHeaderDetection.py` | Header in row 5, real Excel row numbers, `--header-row`, missing header |
 | `tests/testLogging.py` | Block indentation, blank-line separation, source location, `--debug-file` |
 

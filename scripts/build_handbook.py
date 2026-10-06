@@ -148,36 +148,37 @@ def diagrams():
   STATIONEN }|--o{ PROJEKTE : "betroffener Standort als ID-Liste"
 ''')
 
-    d = Diagram(1400, 700, 'Topologie: direkte MJAP-Zeilen und einzeln gelieferte Parser-Beine')
-    d.box(30, 80, 390, 85, 'Punkt zu Punkt', ['Anfang + Ende → eine Linie'])
-    d.box(470, 80, 450, 85, 'Zusammengefasste Y-Zeile', ['Anfang + Ende + T1 + Y1 → 3 Legs'])
-    d.box(960, 80, 410, 85, 'Zusammengefasste Doppel-Y', ['Anfang + Ende + T1/T2 + Y1/Y2'])
-    d.line(90, 285, 355, 285, False)
-    d.node(90, 285, 'A'); d.node(355, 285, 'E')
-    for x, y in [(540, 230), (845, 230), (695, 420)]: d.line(x, y, 695, 320, False)
-    for x, y, label in [(540, 230, 'A'), (845, 230, 'E'), (695, 420, 'T1'), (695, 320, 'Y1')]: d.node(x, y, label)
-    for p in [(995, 240, 1100, 320), (1045, 420, 1100, 320), (1100, 320, 1240, 320), (1240, 320, 1295, 420), (1240, 320, 1340, 240)]: d.line(*p, False)
-    for p in [(995, 240, 'A'), (1045, 420, 'T1'), (1100, 320, 'Y1'), (1240, 320, 'Y2'), (1295, 420, 'T2'), (1340, 240, 'E')]: d.node(*p)
-    d.text(1090, 482, '5 Legs', 19, bold=True)
-    d.box(30, 545, 1340, 115, 'Der aktuelle Parser liefert Multipods bereits als einzelne P2P-Beine',
-          ['Multipod benennt zusätzlich den gemeinsamen virtuellen SUB-Knoten. T1/T2 bleiben leer.',
-           'Nicht automatisch mehrere Excel-Zeilen zu einer neuen Y-Sammelzeile zusammenfassen.'], '#fff0d9')
+    d = Diagram(1400, 700, 'Topologie: Excel-Dreibein wird zu einer Y-Zeile und zwei Paarzeilen')
+    d.box(30, 80, 420, 100, '1. CSV-Zeile: vollständiges Y', ['Anfang=A / Ende=B / T1=C / Y1=X', 'Name: LONG-NAME der ersten Excel-Zeile'])
+    d.box(485, 80, 420, 100, '2. CSV-Zeile: Paar A–C', ['T1/T2/Y1/Y2 leer', 'Namenszusatz: ohne Bein B'])
+    d.box(940, 80, 430, 100, '3. CSV-Zeile: Paar B–C', ['T1/T2/Y1/Y2 leer', 'Namenszusatz: ohne Bein A'])
+    for x, y in [(90, 250), (390, 250), (240, 425)]: d.line(x, y, 240, 335, False)
+    for x, y, label in [(90, 250, 'A'), (390, 250, 'B'), (240, 425, 'C / T1'), (240, 335, 'X / Y1')]: d.node(x, y, label)
+    d.line(545, 335, 845, 335, False)
+    d.node(545, 335, 'A'); d.node(845, 335, 'C')
+    d.line(1000, 335, 1305, 335, False)
+    d.node(1000, 335, 'B'); d.node(1305, 335, 'C')
+    d.text(240, 490, 'MJAP: drei Y-Teilstrecken', 19, bold=True, anchor='middle')
+    d.text(695, 490, 'MJAP: eine direkte Linie', 19, bold=True, anchor='middle')
+    d.text(1155, 490, 'MJAP: eine direkte Linie', 19, bold=True, anchor='middle')
+    d.box(30, 545, 1340, 115, 'Excel: 3 Beine → CSV: 3 Zeilen → MJAP: 5 Linienobjekte',
+          ['Erste Excel-Zeile: A + B + T1=C + Y1=X. Zweite: A–C ohne B. Dritte: B–C ohne A.',
+           'Y1 steht nur im ersten Eintrag; T2/Y2 bleiben leer. Paarlinien sind direkte Verbindungen.'], '#fff0d9')
     result['topologie'] = d.save('topologie')
     (folder / 'topologie.mmd').write_text('''flowchart LR
-  subgraph P2P
-    A1[Anfang] --- E1[Ende]
+  Excel[Excel: X-A / X-B / X-C] --> Voll[Erste CSV-Zeile: A / B / T1=C / Y1=X]
+  Excel --> Paar2[Zweite CSV-Zeile: A-C ohne B]
+  Excel --> Paar3[Dritte CSV-Zeile: B-C ohne A]
+  subgraph Paar_AC
+    A1[A] --- E1[C]
   end
   subgraph Y
     A2[Anfang] --- Y1[Y1]
-    E2[Ende] --- Y1
-    T1[T1] --- Y1
+    E2[B] --- Y1
+    T1[C / T1] --- Y1
   end
-  subgraph DoppelY
-    A3[Anfang] --- Y3[Y1]
-    T3[T1] --- Y3
-    Y3 --- Y4[Y2]
-    Y4 --- T4[T2]
-    Y4 --- E3[Ende]
+  subgraph Paar_BC
+    B3[B] --- C3[C]
   end
 ''')
 

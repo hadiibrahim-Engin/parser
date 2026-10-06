@@ -48,7 +48,7 @@ def testGeneratedBundleRunsThroughRealMjap(application, tmp_path, logger, withOu
     from mjap_plugin.toolbelt.sharepoint2qgis_v4 import sharepoint2qgis
     rows = [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380', 'Latitude': '53.55', 'Longitude': '9.99'}),
             stationRow(**{'ELEMENT ID': 'XDemo_380', 'Latitude': '52.9', 'Longitude': '11.7'}),
-            elementRow(**{'Station 1': 'XDemo_380', 'Multipod': 'XDemo_380'}),
+            elementRow(**{'Station 1': 'XDemo_380'}),
             elementRow(**{'ELEMENT ID': 'TRA_1', 'ELEMENT-TYPE': 'TRA'})]
     workbook = writeExcel(rows, tmp_path / 'network.xlsx')
     outagesPath = projectsPath = None

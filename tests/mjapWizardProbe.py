@@ -19,6 +19,7 @@ os.environ['MJAP_TPZW_SETTINGS_FILE'] = str(root / 'tpzw.ini')
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, os.environ.get('NAHRIVA_WORKS', '/Users/hadi/Desktop/nahriva_works'))
 from conftest import stationRow, elementRow, writeExcel
+from testMultipod import multipodRows
 from excelToCsv.pipeline import runConversion
 import pandas as pd
 from qgis.core import (QgsApplication, QgsProject, QgsVectorLayer, QgsLayerTreeModel,
@@ -73,11 +74,13 @@ from mjap_plugin.plugin_main import MJAPPlugin
 
 rows = [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380', 'Latitude': '53.55', 'Longitude': '9.99'}),
         elementRow(), elementRow(**{'ELEMENT ID': 'TRA_1', 'ELEMENT-TYPE': 'TRA'})]
+if scenario == 'multipod':
+    rows = multipodRows()
 if scenario == 'closed-lifetimes':
     for row in rows: row['ENDLIFETIME'] = '2035-12-31'
 workbook = writeExcel(rows, root / 'network.xlsx')
 outagesPath = projectsPath = None
-if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer'):
+if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer', 'multipod'):
     outagesPath, projectsPath = root / 'outages.csv', root / 'projects.csv'
     pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TRA_1',
                    'interne ID': 'FS_1', 'von': '01.06.2028', 'bis': '02.06.2028',
@@ -85,6 +88,13 @@ if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer'):
                    'Schaltung': 'Täglich'}]).to_csv(outagesPath, index=False)
     pd.DataFrame([{'Projektname': 'Demo', 'betroffener Standort': 'Amprion_Berlin_380,Amprion_Hamburg_380',
                    'Umsetzungzeitraum von': '01.01.2028', 'Umsetzungzeitraum bis': '31.12.2028'}]).to_csv(projectsPath, index=False)
+    if scenario == 'multipod':
+        outages = pd.read_csv(outagesPath)
+        outages['Netzelement:MJAP-ID'] = 'Amprion_LINE_001'
+        outages.to_csv(outagesPath, index=False)
+        projects = pd.read_csv(projectsPath)
+        projects['betroffener Standort'] = 'Amprion_StationA_380,Amprion_StationB_380,Amprion_StationC_380'
+        projects.to_csv(projectsPath, index=False)
     if scenario == 'line-and-transformer':
         outages = pd.read_csv(outagesPath)
         lineOutage = outages.iloc[0].copy()
@@ -111,6 +121,9 @@ switches = 2 if scenario == 'line-and-transformer' else 1
 expected = {'Standorte': 2, 'Stromkreise': 2, 'Standorte Schaltungen': 1,
             'Stromkreise Schaltungen': switches,
             'Standorte Projekte': 1, 'Stromkreise Projekte': switches}
+if scenario == 'multipod':
+    expected.update({'Standorte': 4, 'Stromkreise': 5, 'Stromkreise Schaltungen': 1,
+                     'Standorte Schaltungen': 0, 'Stromkreise Projekte': 1})
 for name, count in expected.items():
     layer = project.mapLayersByName(name)[0]
     assert layer.isValid() and layer.featureCount() == count, (name, layer.featureCount())
@@ -118,6 +131,8 @@ for name, count in expected.items():
         geometry = feature.geometry()
         assert not geometry.isEmpty() and geometry.isGeosValid(), name
         assert geometry.wkbType() == layer.wkbType(), name
+        if scenario == 'multipod' and name in ('Stromkreise Schaltungen', 'Stromkreise Projekte'):
+            assert len(geometry.asMultiPolyline()) == 3, name
     assert layer.temporalProperties().isActive(), name
     properties = layer.temporalProperties()
     assert properties.startField() in layer.fields().names(), (name, properties.startField())
@@ -139,8 +154,30 @@ for name, count in expected.items():
                     report['expression_errors'].append([name, expression, compiled.evalErrorString()])
 attributes = pd.read_excel(output / 'attribute.xlsx', sheet_name=None)
 assert set(attributes) == {'SO_Attribute', 'SK_Attribute', 'Schaltungen', 'Projekte'}
-assert attributes['SK_Attribute']['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TRA_1']
+if scenario == 'multipod':
+    assert attributes['SK_Attribute']['MJAP-ID'].value_counts().to_dict() == {
+        'Amprion_LINE_001': 3, 'Amprion_LINE_002': 1, 'Amprion_LINE_003': 1}
+else:
+    assert attributes['SK_Attribute']['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TRA_1']
 assert len(attributes['Schaltungen']) == switches
+if scenario == 'multipod':
+    elements = pd.read_csv(source / 'Netzelemente.csv')
+    assert elements['Y-Knoten-1: MJAP-ID'].notna().tolist() == [True, False, False]
+    assert elements['Station T-1:MJAP-ID'].notna().tolist() == [True, False, False]
+    circuits = pd.read_csv(output / 'SK.csv', sep=';')
+    assert set(circuits['shape-ID']) == {'Amprion_LINE_001_Y1', 'Amprion_LINE_001_Y2',
+                                       'Amprion_LINE_001_Y3', 'Amprion_LINE_002', 'Amprion_LINE_003'}
+    assert set(zip(circuits['Standort Anfang'], circuits['Standort Ende'])) == {
+        ('Amprion_StationA_380', '50Hertz_XStationK_380'),
+        ('Amprion_StationB_380', '50Hertz_XStationK_380'),
+        ('Amprion_StationC_380', '50Hertz_XStationK_380'),
+        ('Amprion_StationA_380', 'Amprion_StationC_380'),
+        ('Amprion_StationB_380', 'Amprion_StationC_380')}
+    names = {'Amprion_LINE_001': 'Leitung xy',
+             'Amprion_LINE_002': 'Leitung xy (ohne Bein StationB_380)',
+             'Amprion_LINE_003': 'Leitung xy (ohne Bein StationA_380)'}
+    assert attributes['SK_Attribute']['Stromkreisname - Langname'].equals(
+        attributes['SK_Attribute']['MJAP-ID'].map(names))
 for name in ('Standorte', 'Stromkreise'):
     assert all(feature['Attribute_IBN'] for feature in project.mapLayersByName(name)[0].getFeatures())
 assert all(feature['Standorte Projekte_Umsetzungzeitraum von']

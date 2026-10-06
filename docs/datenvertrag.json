@@ -1,7 +1,7 @@
 {
   "stand": "2026-10-06",
   "codebasis": {
-    "parser": "95fb92c",
+    "parser": "main: Dreibein-Regel vom 06.10.2026",
     "mjap": "2594712"
   },
   "excel": {
@@ -116,7 +116,7 @@
       [
         "Multipod",
         "O",
-        "Nur bei einzelnen Multipod-Beinen befüllen: Roh-ID einer vorhandenen SUB-Zeile, z. B. XKnoten_380. Nicht X-Koordinate oder Anzahl der Beine."
+        "Roh-ID einer vorhandenen virtuellen SUB-Zeile. Genau drei Leitungsbeine mit derselben Referenz bilden eine Gruppe; der Parser erzeugt eine Y-Zeile und zwei Paarzeilen."
       ],
       [
         "Interesting/Relevant for (50Hertz)",
@@ -363,7 +363,7 @@
         "Stromkreisname - Langname",
         "Text",
         "O / A",
-        "LONG-NAME",
+        "LONG-NAME der jeweiligen Excel-Zeile; Paarzeilen erhalten (ohne Bein <Roh-Stations-ID>)",
         "Ja; Stammdaten/Beschriftung."
       ],
       [
@@ -435,7 +435,7 @@
         "Station Anfang",
         "Vollständige Stations-MJAP-ID",
         "P / A",
-        "Auflösung von Station 1 zur ID des Eigentümers der referenzierten SUB-Zeile",
+        "Station 1; Dreibein-Gruppe: A, A, B nach Excel-Reihenfolge",
         "Ja; Transformatorstandort. Kann eine andere Eigentümer-ID als das Netzelement haben."
       ],
       [
@@ -443,15 +443,15 @@
         "Station Ende",
         "Vollständige Stations-MJAP-ID",
         "P / A",
-        "Auflösung von Station 2",
+        "Station 2; Dreibein-Gruppe: B, C, C nach Excel-Reihenfolge",
         "Nein direkt; die Geometrie liest das :MJAP-ID-Feld."
       ],
       [
         14,
         "Station T-1",
-        "Text-Referenz",
-        "L",
-        "Parser befüllt dies nicht",
+        "Vollständige Stations-MJAP-ID",
+        "B / A",
+        "Nur erste Dreibein-Zeile: dritte äußere Station C; sonst leer",
         "Nein direkt; zusätzliche Topologie benutzt :MJAP-ID."
       ],
       [
@@ -467,7 +467,7 @@
         "Y-Knoten-1",
         "Roh-Stations-ID",
         "O / A",
-        "Multipod, z. B. XKnoten_380",
+        "Multipod-Roh-ID, nur im ersten Dreibein-Eintrag; die anderen beiden bleiben leer",
         "Nein direkt; Plugin-Geometrie benutzt Y-Knoten-1: MJAP-ID."
       ],
       [
@@ -483,7 +483,7 @@
         "Stromkreisname - Kurzname",
         "Text",
         "O / A",
-        "LONG-NAME; kein separates Kurzname-Mapping",
+        "LONG-NAME der jeweiligen Excel-Zeile; Paarzeilen erhalten (ohne Bein <Roh-Stations-ID>)",
         "Nein; aktuell nicht weitergereicht."
       ],
       [
@@ -554,8 +554,8 @@
         27,
         "Station T-1:MJAP-ID",
         "Vollständige Stations-MJAP-ID",
-        "L im Parser; B direkt in MJAP",
-        "Parser leer; beim direkten Y-Import dritte Anschlussstation",
+        "B / A",
+        "Wie Station T-1; automatisch nur im ersten Dreibein-Eintrag",
         "Ja; entscheidet P2P oder Y, deshalb wirklich leer lassen, wenn unbenutzt."
       ],
       [
@@ -570,8 +570,8 @@
         29,
         "Y-Knoten-1: MJAP-ID",
         "Vollständige Stations-MJAP-ID",
-        "O / A; B direkt in MJAP",
-        "Auflösung von Multipod; bei zusammengefasster Y-Topologie notwendiger Y1-Knoten",
+        "B / A",
+        "Auflösung von Multipod, nur im ersten vollständigen Dreibein-Eintrag",
         "Ja; Leerzeichen nach Doppelpunkt beachten."
       ],
       [

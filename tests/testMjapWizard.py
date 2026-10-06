@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip('qgis.core')
 
 
-@pytest.mark.parametrize('scenario', ['populated', 'closed-lifetimes', 'line-and-transformer'])
+@pytest.mark.parametrize('scenario', ['populated', 'closed-lifetimes', 'line-and-transformer', 'multipod'])
 def testFullWizardHasValidLayersJoinsStylesAndNoErrorMessages(tmp_path, scenario):
     result = subprocess.run([sys.executable, '-X', 'faulthandler',
                              str(Path(__file__).with_name('mjapWizardProbe.py')),

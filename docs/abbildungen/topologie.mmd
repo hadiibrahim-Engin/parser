@@ -1,16 +1,15 @@
 flowchart LR
-  subgraph P2P
-    A1[Anfang] --- E1[Ende]
+  Excel[Excel: X-A / X-B / X-C] --> Voll[Erste CSV-Zeile: A / B / T1=C / Y1=X]
+  Excel --> Paar2[Zweite CSV-Zeile: A-C ohne B]
+  Excel --> Paar3[Dritte CSV-Zeile: B-C ohne A]
+  subgraph Paar_AC
+    A1[A] --- E1[C]
   end
   subgraph Y
     A2[Anfang] --- Y1[Y1]
-    E2[Ende] --- Y1
-    T1[T1] --- Y1
+    E2[B] --- Y1
+    T1[C / T1] --- Y1
   end
-  subgraph DoppelY
-    A3[Anfang] --- Y3[Y1]
-    T3[T1] --- Y3
-    Y3 --- Y4[Y2]
-    Y4 --- T4[T2]
-    Y4 --- E3[Ende]
+  subgraph Paar_BC
+    B3[B] --- C3[C]
   end

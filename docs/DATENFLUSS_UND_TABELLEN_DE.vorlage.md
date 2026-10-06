@@ -5,8 +5,9 @@
 Dieses Handbuch erklärt die Ein- und Ausgaben beider Programme. Es beschreibt,
 welche Spalten vorhanden sein müssen, welche Werte gebraucht werden, welche
 Werte leer bleiben dürfen und welche Dateien das Plugin selbst erzeugt.
-Stand: 06.10.2026; Parser-Codebasis `95fb92c`, MJAP-Codebasis `2594712`.
-Die Dokumentation ändert keine Konvertierungs- oder Plugin-Funktion.
+Stand: 06.10.2026; Parser auf `main` einschließlich der Dreibein-Regel,
+MJAP-Codebasis `2594712`. Die Dreibein-Änderung betrifft ausschließlich den
+Parser; die Plugin-Implementierung bleibt unverändert.
 
 **Der gewünschte Ablauf lautet:** Excel einlesen, CSVs erzeugen, den CSV-Ordner
 im MJAP-Menü von QGIS auswählen und die Daten visualisieren. QGIS lädt diese
@@ -193,11 +194,50 @@ aufgelöst; es stehen dort nicht mehr nur die Excel-Roh-IDs.
 
 <!-- FIG:topologie -->
 
-Der Parser erwartet bei Multipods **bereits einzelne Leitungsbeine** als
-Excel-Zeilen mit Anfangs-/Endstation. Der gemeinsame virtuelle Knoten steht
-zusätzlich in `Multipod` und wird als `Y-Knoten-1` / `Y-Knoten-1: MJAP-ID`
-mitgegeben. `Station T-1` und `Station T-2` bleiben dabei leer. MJAP behandelt
-diese Datensätze deshalb als einzelne Punkt-zu-Punkt-Beine.
+**Excel ist die Eingabe; die CSVs werden ohne manuelle Nachbearbeitung erzeugt.**
+Ein Dreibein benötigt vier `SUB`-Zeilen (A, B, C und den virtuellen Knoten X)
+und drei Leitungszeilen. Jede Leitungszeile verbindet X mit genau einer anderen
+Station und enthält dieselbe Roh-ID von X in `Multipod`. Die Richtung
+`Station 1` / `Station 2` darf umgekehrt sein. X braucht eigene Koordinaten;
+der Parser erzeugt weder den Knoten noch dessen Position.
+
+Die **Reihenfolge der drei Leitungszeilen im Excel-Blatt** legt A, B und C fest.
+Die erste Zeile wird zum vollständigen Y-Eintrag, die zweite zu A–C und die
+dritte zu B–C. Es bleiben drei CSV-Zeilen; keine vierte Sammelzeile wird ergänzt.
+
+| CSV-Zeile / Excel-Quellzeile | Anfang | Ende | T-1 | T-2 | Y-Knoten-1 | Leitungsname |
+| --- | --- | --- | --- | --- | --- | --- |
+| Erste Leitungszeile | A | B | C | leer | X | `LONG-NAME` der ersten Excel-Zeile |
+| Zweite Leitungszeile | A | C | leer | leer | leer | `LONG-NAME` der zweiten Zeile + ` (ohne Bein <Roh-ID von B>)` |
+| Dritte Leitungszeile | B | C | leer | leer | leer | `LONG-NAME` der dritten Zeile + ` (ohne Bein <Roh-ID von A>)` |
+
+Anfang, Ende und T-1 werden in den normalen und den `:MJAP-ID`-Spalten mit den
+vollständigen Stations-IDs gefüllt. Y1 enthält einmal die Roh-ID und einmal
+deren vollständige MJAP-ID. **Nur die erste Netzelementzeile trägt den Y-Knoten.**
+In `Stationen.csv` steht X einmal als eigener Stationseintrag. T-2 und Y2
+bleiben bei allen drei Datensätzen leer. Lang- und Kurzname erhalten dieselben
+Zusätze; IDs, Eigentümer, Termine und übrige Attribute bleiben ihrer jeweiligen
+Excel-Quellzeile zugeordnet. Deshalb verändern eine andere Excel-Reihenfolge
+oder unterschiedliche Betriebsdaten der Beine auch die Zuordnung des vollständigen
+Y-Eintrags. Diese fachliche Zuordnung muss in Excel bewusst gepflegt werden.
+
+MJAP erzeugt aus dem ersten Eintrag drei Strecken A–X, B–X und C–X; aus den
+anderen beiden je eine **direkte** Linie A–C und B–C. Die Paarlinien verlaufen
+nicht über X. Insgesamt sind es fünf Linienobjekte mit drei Netzelement-IDs.
+Eine Freischaltung der ersten ID betrifft alle drei Y-Beine; die anderen IDs
+betreffen jeweils nur ihre Paarlinie. Die ursprünglichen Bein-IDs werden
+beibehalten, ihre Verbindungsbedeutung ändert sich jedoch gemäß dieser Tabelle.
+
+Eine Gruppe benötigt genau drei verschiedene äußere Stationen, dieselbe Spannung
+und denselben Leitungstyp (`LINE`, `TIE` oder `DCL`). Fehlende Beine, doppelte
+Endpunkte, mehrere Stromkreise am gleichen Multipod oder vier Beine werden als
+Fehler gemeldet. `--mjap` und `--strict` brechen vor dem Schreiben ab; der normale
+fehlertolerante Modus protokolliert den Fehler. Vier Beine an einem einzigen X
+werden derzeit nicht automatisch konvertiert: T-2 allein genügt im bestehenden
+Plugin nicht, weil dessen Doppel-Y-Topologie zwei Y-Knoten verlangt.
+
+Ein vollständiges [Excel-Dreibein-Beispiel](beispiel/dreibein/README_DE.md)
+zeigt Eingabe, automatisch erzeugte CSVs und den echten MJAP-Prüflauf.
 
 Der direkte MJAP-Import kann außerdem eine zusammengefasste Y-Zeile aufspalten:
 
@@ -211,8 +251,8 @@ Die sechs referenzierten Felder heißen exakt `Station Anfang:MJAP-ID`,
 `Station Ende:MJAP-ID`, `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID`,
 `Y-Knoten-1: MJAP-ID`, `Y-Knoten-2: MJAP-ID`. Bei Y-Feldern steht ein Leerzeichen
 nach dem Doppelpunkt; bei Stationsfeldern nicht. Alle belegten IDs müssen in
-`Stationen.csv` mit gültigen Koordinaten vorkommen. Das zusätzliche Sammeln
-einzelner Parser-Beine in eine neue Y-Zeile ist derzeit nicht implementiert.
+`Stationen.csv` mit gültigen Koordinaten vorkommen. Der Parser befüllt die
+Y-Topologie nach der oben beschriebenen Dreibein-Regel automatisch.
 
 ### 6.2 Mehrfachtermine beim direkten Plugin-Import
 
@@ -573,6 +613,16 @@ der echten QGIS-Umgebung, darunter drei vollständige Visualisierungsassistenten
 läufe. Geprüft wurden Geometrien, Mengen, Joins, Zeitfelder und aktive
 Regelausdrücke. Details stehen im Parser in `MJAP_PRUEFBERICHT_DE.md`.
 
+Die Dreibein-Erweiterung wurde zusätzlich mit 410 Parser-Tests (pandas 3.0.5)
+und 59 Tests in der echten QGIS-/MJAP-Umgebung (pandas 2.2.3), einschließlich
+eines vollständigen Dreibein-Assistentenlaufs, geprüft. Die
+[Dreibein-Prüfdateien](beispiel/dreibein/README_DE.md) enthalten das tatsächliche
+Ergebnis. Vier Stationen und fünf gültige Linienobjekte; die vollständige
+Y-Schaltung und das zugehörige Projekt enthalten jeweils alle drei Y-Beine.
+Der Test prüft auch Quell-IDs, Namen, Stationspaare und leere T-/Y-Felder der
+Paarzeilen. Keine GUI-Warnung, keine kritische Meldung und keine Fehler in den
+geprüften aktiven Regelausdrücken; die bekannte ABN-Datumswarnung bleibt möglich.
+
 Der unterstützte Teststand ist QGIS 3.40.3 / Qt 5 / Python 3.12 / pandas 2.2.3
 für MJAP. Die Parser-Tests laufen zusätzlich mit pandas 3.0.5. Daraus folgt
 keine Freigabe des Plugins für pandas 3 oder QGIS 4 / Qt 6.
@@ -595,7 +645,7 @@ bash scripts/local.sh gui
 
 Nicht zugesichert sind beliebige Fremd-CSV-Zusatzspalten, sämtliche numerischen
 ID-Inferenzfälle, fachlich richtige Schaltungs-/Projektzeiträume, ein automatischer
-Export aller Excel-Blätter, zusammengefasste Parser-Y-Zeilen oder die virtuelle
+Export aller Excel-Blätter, automatische Vierbein-/Mehrfachstromkreis-Gruppen oder die virtuelle
 Zeitreihendarstellung bei NULL-ABN. Die Eingabe kann technisch gültig und fachlich
 trotzdem falsch sein. Dummy-Tests ersetzen keine Abnahme mit echten Netzdaten.
 

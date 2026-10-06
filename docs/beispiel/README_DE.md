@@ -3,6 +3,9 @@
 **Alle Dateien hier enthalten ausschließlich Dummy-Daten.** Die Beispiele dienen
 der Erklärung des Datenvertrags und stellen keine realen Netzdaten dar.
 
+Das zusätzliche [Excel-Dreibein-Beispiel](dreibein/README_DE.md) zeigt die neue
+Regel: ein vollständiger Y-Eintrag und zwei Paarverbindungen, nur einmal Y1.
+
 | Datei | Rolle |
 | --- | --- |
 | `DUMMY_Netz.xlsx` | Excel-Eingabe des Parsers; ein Blatt mit zwei Stationen, einer Leitung und einem Transformator |

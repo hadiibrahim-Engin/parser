@@ -80,3 +80,39 @@ Die QGIS-Testumgebung kommt aus `../mjap_plugin/.local-env`; alternativ
 `QGIS_ENV` auf den absoluten Pfad einer kompatiblen PyQGIS-Umgebung setzen.
 Der Teststarter verwendet echte QGIS-/GDAL-/SpatiaLite-Bibliotheken. Nur die
 Desktop-Schnittstelle, Ordnerauswahl und Meldungsanzeige sind im Test angepasst.
+
+## Ergänzung vom 06.10.2026: Excel-Dreibein
+
+Die neue Multipod-Konvertierung bleibt vollständig im Parser. Drei Excel-Beine
+an einem vorhandenen virtuellen SUB-Knoten ergeben genau drei CSV-Einträge:
+Die erste Leitungszeile enthält A, B, T-1=C und Y1=X; die zweite A–C ohne B;
+die dritte B–C ohne A. Nur die erste Zeile hat T-1/Y1. IDs und übrige Attribute
+bleiben an ihren Quellzeilen. Die Verbindungsbedeutung der IDs ändert sich nach
+dieser Regel; Excel-Reihenfolge und unterschiedliche Betriebsdaten müssen deshalb
+fachlich geprüft werden. T-2/Y2 bleiben leer; vier Beine oder mehrere Stromkreise
+am selben X werden nicht automatisch erschlossen.
+
+- **410 Parser-Tests bestanden**, zwei QGIS-Testmodule übersprungen, pandas 3.0.5.
+- **59 Tests bestanden** in der echten QGIS-3.40.3-/pandas-2.2.3-Umgebung:
+  die bisherigen MJAP-Prüfungen, vier vollständige Assistentenszenarien und
+  die neuen Dreibein-Tests.
+- Vier Stationspunkte, drei Netzelement-IDs und fünf gültige Linienobjekte:
+  A–X, B–X, C–X sowie direkte A–C und B–C.
+- Eine Freischaltung der ersten ID enthält alle drei Y-Beine in einem
+  MultiLineString; dasselbe gilt für die zugehörige Projektgeometrie.
+- Geprüft: vollständige Shape-IDs und Stationspaare, Quell-ID-/Datumserhalt,
+  Namen mit Ausschlusszusatz, genau einmal Y1, fehlende T-/Y-Felder der Paarzeilen,
+  Zeitfelder, Joins und aktive Stilausdrücke. Ungültige Gruppen, Null-Längen der
+  Y-Beine und erzeugte Shape-ID-Kollisionen werden vor dem MJAP-Export abgewiesen.
+- Keine GUI-Warnung, keine kritische Meldung und keine Fehler in den geprüften
+  aktiven Regelausdrücken. Die bekannte pandas-ABN-Warnung bleibt möglich.
+
+[Wiederholbares Excel-Beispiel mit den erzeugten CSVs und dem tatsächlichen
+Assistentenbericht](docs/beispiel/dreibein/README_DE.md). Ein erneuter CLI-Export
+mit pandas 3 erzeugt bytegenau dieselben vier CSV-Dateien wie der QGIS-Prüflauf.
+
+Zusätzliche Prüfungen wiederholen:
+
+```bash
+bash scripts/test_mjap.sh tests/testMultipod.py -o addopts= -q
+```

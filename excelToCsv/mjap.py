@@ -88,6 +88,25 @@ def prepareMjapFrames(stations: pd.DataFrame, elements: pd.DataFrame) -> tuple[p
             raise ConversionError('MJAP lifecycle date range is reversed: IBN / ABN.')
     for column in OPTIONAL_REFERENCES:
         elements[column] = elements[column].replace({'NaN': '', ' ': ''})
+    shapeIds: set[str] = set()
+    for _, element in elements.iterrows():
+        start, end = element['Station Anfang:MJAP-ID'], element['Station Ende:MJAP-ID']
+        third, node = element['Station T-1:MJAP-ID'], element['Y-Knoten-1: MJAP-ID']
+        if third:
+            if third not in ids or node not in ids:
+                raise ConversionError('MJAP Y topology requires an existing third station and Y node.')
+            edges = [(station, node) for station in (start, end, third)]
+            generated = [f"{element['MJAP-ID']}_Y{number}" for number in (1, 2, 3)]
+        else:
+            edges, generated = [(start, end)], [element['MJAP-ID']]
+        for first, second in edges:
+            if first == second or coordinates.loc[first].equals(coordinates.loc[second]):
+                raise ConversionError(f'MJAP cannot generate a zero-length line: {first} / {second}.')
+        for identifier in generated:
+            _validateShapeId(identifier)
+            if identifier in shapeIds:
+                raise ConversionError(f'MJAP generated shape-ID collision: {identifier}')
+            shapeIds.add(identifier)
     # Paired one-item lists repeat existing dates. Spaces represent ONLY missing
     # dates, giving pandas a text dtype for .str.split without inventing a date.
     for dateColumn in ('IBN', 'ABN'):

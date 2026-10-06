@@ -144,27 +144,6 @@ def stationReferenceMjapIds(
     )
 
 
-def multipodMjapIds(
-    multipods: np.ndarray,
-    stationMjapByElementId: dict[str, str],
-) -> np.ndarray:
-    """Resolve multipod references to the MJAP-ID of the virtual station.
-
-    Mirrors :func:`stationReferenceMjapIds`: the plain column keeps the
-    referenced ``ELEMENT ID``, the ``:MJAP-ID`` column carries the resolved
-    ``<owner>_<ELEMENT ID>``. An empty reference stays empty; an unresolvable
-    one is already a fatal error raised by the validation step.
-    """
-    return np.fromiter(
-        (
-            stationMjapByElementId.get(reference, "") if reference else ""
-            for reference in multipods
-        ),
-        dtype=object,
-        count=len(multipods),
-    )
-
-
 def convertNetworkElements(
     rows: RowSet,
     context: ConversionContext,
@@ -215,12 +194,6 @@ def convertNetworkElements(
     stationStartMjap = stationReferenceMjapIds(stationStart, stationMjapByElementId)
     stationEndMjap = stationReferenceMjapIds(stationEnd, stationMjapByElementId)
 
-    # A populated Multipod names the virtual station shared by the legs of a
-    # three-legged line. The legs stay separate records - the reference is only
-    # carried into the Y node columns.
-    multipods = textColumn(rows.frame, COL_MULTIPOD)
-    multipodMjap = multipodMjapIds(multipods, stationMjapByElementId)
-
     voltages = np.fromiter(
         (normalizeVoltage(value) for value in columnValues(rows.frame, COL_VOLTAGE_LEVEL)),
         dtype=object,
@@ -251,7 +224,7 @@ def convertNetworkElements(
         "Station Ende": stationEndMjap,
         "Station T-1": emptyColumn(rowCount),
         "Station T-2": emptyColumn(rowCount),
-        "Y-Knoten-1": multipods,
+        "Y-Knoten-1": emptyColumn(rowCount),
         "Y-Knoten-2": emptyColumn(rowCount),
         "Stromkreisname - Kurzname": longNames,
         "Stromkreisname - OPC-Name": emptyColumn(rowCount),
@@ -264,7 +237,81 @@ def convertNetworkElements(
         "Station Ende:MJAP-ID": stationEndMjap,
         "Station T-1:MJAP-ID": emptyColumn(rowCount),
         "Station T-2:MJAP-ID": emptyColumn(rowCount),
-        "Y-Knoten-1: MJAP-ID": multipodMjap,
+        "Y-Knoten-1: MJAP-ID": emptyColumn(rowCount),
         "Y-Knoten-2: MJAP-ID": emptyColumn(rowCount),
     }
-    return pd.DataFrame(data, columns=list(NETWORK_ELEMENT_COLUMNS), dtype=object)
+    output = pd.DataFrame(data, columns=list(NETWORK_ELEMENT_COLUMNS), dtype=object)
+    applyMultipodTopology(rows, output, context, stationMjapByElementId)
+    return output
+
+
+def applyMultipodTopology(
+    rows: RowSet,
+    output: pd.DataFrame,
+    context: ConversionContext,
+    stationMjapByElementId: dict[str, str],
+) -> None:
+    """Three Excel legs become one complete Y record and two pair records.
+
+    Excel order assigns A, B, C and selects the first record as the complete Y.
+    IDs and per-row business attributes stay attached to their source rows.
+    The other records connect A-C (without B) and B-C (without A), respectively.
+    A virtual node is therefore referenced in exactly one output record.
+    """
+    groups: dict[str, list[int]] = {}
+    for position, node in enumerate(textColumn(rows.frame, COL_MULTIPOD)):
+        if node:
+            groups.setdefault(node, []).append(position)
+    starts = textColumn(rows.frame, COL_STATION_1)
+    ends = textColumn(rows.frame, COL_STATION_2)
+
+    for node, positions in groups.items():
+        # The dedicated reference validator reports a missing SUB node.
+        if node not in stationMjapByElementId:
+            continue
+        outer: list[str] = []
+        valid = len(positions) == 3
+        for position in positions:
+            start, end = starts[position], ends[position]
+            if ((start == node) == (end == node)
+                    or rows.elementTypes[position] not in {"LINE", "TIE", "DCL"}):
+                valid = False
+            outer.append(end if start == node else start)
+        valid = valid and len(set(outer)) == 3
+        valid = valid and all(station in stationMjapByElementId for station in outer)
+        valid = valid and len({output.at[p, "Spannung"] for p in positions}) == 1
+        valid = valid and len({rows.elementTypes[p] for p in positions}) == 1
+        if not valid:
+            context.collector.error(
+                "Multipod must describe exactly three unambiguous line legs.",
+                field=COL_MULTIPOD,
+                value=node,
+                expected=(
+                    "Exactly three LINE/TIE/DCL rows of the same type and voltage "
+                    "must share this Multipod. Each must connect the referenced SUB "
+                    "node to one of three distinct existing outer SUB stations. "
+                    "Four-leg and multiple-circuit groups are not inferred."
+                ),
+                **rows.context(positions[0]),
+            )
+            continue
+
+        first, second, third = positions
+        a, b, c = (stationMjapByElementId[station] for station in outer)
+        for position, start, end in ((first, a, b), (second, a, c), (third, b, c)):
+            for column in ("Station Anfang", "Station Anfang:MJAP-ID"):
+                output.at[position, column] = start
+            for column in ("Station Ende", "Station Ende:MJAP-ID"):
+                output.at[position, column] = end
+        for column in ("Station T-1", "Station T-1:MJAP-ID"):
+            output.at[first, column] = c
+        output.at[first, "Y-Knoten-1"] = node
+        output.at[first, "Y-Knoten-1: MJAP-ID"] = stationMjapByElementId[node]
+        for position, excluded in ((second, outer[1]), (third, outer[0])):
+            for column in ("Stromkreisname - Langname", "Stromkreisname - Kurzname"):
+                name = output.at[position, column]
+                output.at[position, column] = f"{name} (ohne Bein {excluded})".lstrip()
+        context.logger.info(
+            "Multipod %s: first Excel line %s is the complete Y; %s and %s are pair connections.",
+            node, rows.elementIds[first], rows.elementIds[second], rows.elementIds[third],
+        )

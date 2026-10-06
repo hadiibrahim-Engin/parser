@@ -5,8 +5,9 @@
 Dieses Handbuch erklärt die Ein- und Ausgaben beider Programme. Es beschreibt,
 welche Spalten vorhanden sein müssen, welche Werte gebraucht werden, welche
 Werte leer bleiben dürfen und welche Dateien das Plugin selbst erzeugt.
-Stand: 06.10.2026; Parser-Codebasis `95fb92c`, MJAP-Codebasis `2594712`.
-Die Dokumentation ändert keine Konvertierungs- oder Plugin-Funktion.
+Stand: 06.10.2026; Parser auf `main` einschließlich der Dreibein-Regel,
+MJAP-Codebasis `2594712`. Die Dreibein-Änderung betrifft ausschließlich den
+Parser; die Plugin-Implementierung bleibt unverändert.
 
 **Der gewünschte Ablauf lautet:** Excel einlesen, CSVs erzeugen, den CSV-Ordner
 im MJAP-Menü von QGIS auswählen und die Daten visualisieren. QGIS lädt diese
@@ -96,7 +97,7 @@ erkannt, z. B. `XKnoten_380`; diese erhalten `reales UW = Falsch`.
 
 | Spalte / Muster | Spalte vorhanden? | Werte / Verhalten |
 | --- | --- | --- |
-| Multipod | O | Nur bei einzelnen Multipod-Beinen befüllen: Roh-ID einer vorhandenen SUB-Zeile, z. B. XKnoten_380. Nicht X-Koordinate oder Anzahl der Beine. |
+| Multipod | O | Roh-ID einer vorhandenen virtuellen SUB-Zeile. Genau drei Leitungsbeine mit derselben Referenz bilden eine Gruppe; der Parser erzeugt eine Y-Zeile und zwei Paarzeilen. |
 | Interesting/Relevant for (50Hertz) | O; dynamisch erkannt | Beispiel für Relevanz: nicht leer und nicht 0/0.0/false/nein/no bedeutet relevant; leer oder diese Null-Marker bedeutet nicht relevant. |
 | Weitere Überschriften mit relevant for oder interesting | O; dynamisch erkannt | Organisationsname wird aus Klammern bzw. dem Rest des Headers abgeleitet. Mehrere Treffer ergeben 50Hertz;TennetD als Text. |
 | Map Multipod | O | Wird nicht für Multipod-Geometrie ausgewertet. |
@@ -238,7 +239,7 @@ aufgelöst; es stehen dort nicht mehr nur die Excel-Roh-IDs.
 | --- | --- | --- | --- | --- | --- |
 | 1 | Eigentümer | Text | P / A | TSO | Ja; Stammdaten. |
 | 2 | MJAP-ID | Text-ID | P / A | TSO + _ + ELEMENT ID, z. B. Amprion_LINE_471 | Ja; Elementschlüssel, später ggf. Phasen-Suffix. |
-| 3 | Stromkreisname - Langname | Text | O / A | LONG-NAME | Ja; Stammdaten/Beschriftung. |
+| 3 | Stromkreisname - Langname | Text | O / A | LONG-NAME der jeweiligen Excel-Zeile; Paarzeilen erhalten (ohne Bein <Roh-Stations-ID>) | Ja; Stammdaten/Beschriftung. |
 | 4 | Region | Text | L | Keine definierte Quelle; CCR/ROA wird nicht übernommen | Ja, als optionales Attribut. |
 | 5 | Element Typ | Text-Code/-Bezeichnung | P / A | ELEMENT-TYPE; MJAP-Zuordnung LINE→Stromkreis, TRA→Trafo, TIE→Kuppelleitung, DCL→HGÜ-Strecke | Ja; exakter Wert Trafo aktiviert Standort-Schaltungszuordnung. |
 | 6 | Spannung | Text, ggf. /-Liste | S / A | VOLTAGE-LEVEL, z. B. 380 oder 380/110; keine JSON-Liste | Ja; Kategorie des Stromkreisstils. |
@@ -247,13 +248,13 @@ aufgelöst; es stehen dort nicht mehr nur die Excel-Roh-IDs.
 | 9 | ABN | Datumstext TT.MM.JJJJ oder Text-Leerwert | O / A | ENDLIFETIME; bei fehlendem Wert im MJAP-Modus ein Leerzeichen | Ja; Leerzeichen wird zu fehlendem Datum, nicht zu einem fachlichen Endtermin. |
 | 10 | IBN - Mehrfach | Textliste | A | Im aktuellen MJAP-Parser eine Einzelliste aus IBN | Ja; .str.split und paarweises explode; Überschrift und Textlesbarkeit nötig. |
 | 11 | ABN - Mehrfach | Textliste | A | Bei Einzeltermin-Quelle Einzelliste aus ABN; bei unbekanntem ABN ein Leerzeichen. Mehrteilige ABN sind im Parser-MJAP-Weg nicht freigegeben. | Ja; genau eine Phase passend zur Einzel-IBN im geprüften Weg. |
-| 12 | Station Anfang | Vollständige Stations-MJAP-ID | P / A | Auflösung von Station 1 zur ID des Eigentümers der referenzierten SUB-Zeile | Ja; Transformatorstandort. Kann eine andere Eigentümer-ID als das Netzelement haben. |
-| 13 | Station Ende | Vollständige Stations-MJAP-ID | P / A | Auflösung von Station 2 | Nein direkt; die Geometrie liest das :MJAP-ID-Feld. |
-| 14 | Station T-1 | Text-Referenz | L | Parser befüllt dies nicht | Nein direkt; zusätzliche Topologie benutzt :MJAP-ID. |
+| 12 | Station Anfang | Vollständige Stations-MJAP-ID | P / A | Station 1; Dreibein-Gruppe: A, A, B nach Excel-Reihenfolge | Ja; Transformatorstandort. Kann eine andere Eigentümer-ID als das Netzelement haben. |
+| 13 | Station Ende | Vollständige Stations-MJAP-ID | P / A | Station 2; Dreibein-Gruppe: B, C, C nach Excel-Reihenfolge | Nein direkt; die Geometrie liest das :MJAP-ID-Feld. |
+| 14 | Station T-1 | Vollständige Stations-MJAP-ID | B / A | Nur erste Dreibein-Zeile: dritte äußere Station C; sonst leer | Nein direkt; zusätzliche Topologie benutzt :MJAP-ID. |
 | 15 | Station T-2 | Text-Referenz | L | Parser befüllt dies nicht | Nein direkt; leer lassen. |
-| 16 | Y-Knoten-1 | Roh-Stations-ID | O / A | Multipod, z. B. XKnoten_380 | Nein direkt; Plugin-Geometrie benutzt Y-Knoten-1: MJAP-ID. |
+| 16 | Y-Knoten-1 | Roh-Stations-ID | O / A | Multipod-Roh-ID, nur im ersten Dreibein-Eintrag; die anderen beiden bleiben leer | Nein direkt; Plugin-Geometrie benutzt Y-Knoten-1: MJAP-ID. |
 | 17 | Y-Knoten-2 | Text-Referenz | L | Parser befüllt dies nicht | Nein direkt; leer lassen. |
-| 18 | Stromkreisname - Kurzname | Text | O / A | LONG-NAME; kein separates Kurzname-Mapping | Nein; aktuell nicht weitergereicht. |
+| 18 | Stromkreisname - Kurzname | Text | O / A | LONG-NAME der jeweiligen Excel-Zeile; Paarzeilen erhalten (ohne Bein <Roh-Stations-ID>) | Nein; aktuell nicht weitergereicht. |
 | 19 | Stromkreisname - OPC-Name | Text | L | Keine definierte Quelle | Nein; leer lassen. |
 | 20 | ID-GUID intern-1 | Text-ID | L | Keine definierte Quelle | Nein; leer lassen. |
 | 21 | ID-GUID intern-2 | Text-ID | L | Keine definierte Quelle | Nein; leer lassen. |
@@ -262,9 +263,9 @@ aufgelöst; es stehen dort nicht mehr nur die Excel-Roh-IDs.
 | 24 | ID | Text-ID | L | Keine definierte Quelle | Nein; keine neue Pflicht-ID erfinden. |
 | 25 | Station Anfang:MJAP-ID | Vollständige Stations-MJAP-ID | P / A | Wie Station Anfang | Ja; erster Geometrieanschluss. |
 | 26 | Station Ende:MJAP-ID | Vollständige Stations-MJAP-ID | P / A | Wie Station Ende | Ja; zweiter Geometrieanschluss. |
-| 27 | Station T-1:MJAP-ID | Vollständige Stations-MJAP-ID | L im Parser; B direkt in MJAP | Parser leer; beim direkten Y-Import dritte Anschlussstation | Ja; entscheidet P2P oder Y, deshalb wirklich leer lassen, wenn unbenutzt. |
+| 27 | Station T-1:MJAP-ID | Vollständige Stations-MJAP-ID | B / A | Wie Station T-1; automatisch nur im ersten Dreibein-Eintrag | Ja; entscheidet P2P oder Y, deshalb wirklich leer lassen, wenn unbenutzt. |
 | 28 | Station T-2:MJAP-ID | Vollständige Stations-MJAP-ID | L im Parser; B direkt in MJAP | Parser leer; beim direkten Doppel-Y-Import vierte Anschlussstation | Ja; nur zusammen mit vollständiger Doppel-Y-Topologie füllen. |
-| 29 | Y-Knoten-1: MJAP-ID | Vollständige Stations-MJAP-ID | O / A; B direkt in MJAP | Auflösung von Multipod; bei zusammengefasster Y-Topologie notwendiger Y1-Knoten | Ja; Leerzeichen nach Doppelpunkt beachten. |
+| 29 | Y-Knoten-1: MJAP-ID | Vollständige Stations-MJAP-ID | B / A | Auflösung von Multipod, nur im ersten vollständigen Dreibein-Eintrag | Ja; Leerzeichen nach Doppelpunkt beachten. |
 | 30 | Y-Knoten-2: MJAP-ID | Vollständige Stations-MJAP-ID | L im Parser; B direkt in MJAP | Parser leer; beim direkten Doppel-Y-Import notwendiger Y2-Knoten | Ja; Überschrift behalten, unbenutzt echte leere Zelle. |
 
 ### 6.1 Multipod im Parser und Y-Topologie im Plugin
@@ -273,11 +274,50 @@ aufgelöst; es stehen dort nicht mehr nur die Excel-Roh-IDs.
 
 [Bearbeitbare Mermaid-Quelle](abbildungen/topologie.mmd).
 
-Der Parser erwartet bei Multipods **bereits einzelne Leitungsbeine** als
-Excel-Zeilen mit Anfangs-/Endstation. Der gemeinsame virtuelle Knoten steht
-zusätzlich in `Multipod` und wird als `Y-Knoten-1` / `Y-Knoten-1: MJAP-ID`
-mitgegeben. `Station T-1` und `Station T-2` bleiben dabei leer. MJAP behandelt
-diese Datensätze deshalb als einzelne Punkt-zu-Punkt-Beine.
+**Excel ist die Eingabe; die CSVs werden ohne manuelle Nachbearbeitung erzeugt.**
+Ein Dreibein benötigt vier `SUB`-Zeilen (A, B, C und den virtuellen Knoten X)
+und drei Leitungszeilen. Jede Leitungszeile verbindet X mit genau einer anderen
+Station und enthält dieselbe Roh-ID von X in `Multipod`. Die Richtung
+`Station 1` / `Station 2` darf umgekehrt sein. X braucht eigene Koordinaten;
+der Parser erzeugt weder den Knoten noch dessen Position.
+
+Die **Reihenfolge der drei Leitungszeilen im Excel-Blatt** legt A, B und C fest.
+Die erste Zeile wird zum vollständigen Y-Eintrag, die zweite zu A–C und die
+dritte zu B–C. Es bleiben drei CSV-Zeilen; keine vierte Sammelzeile wird ergänzt.
+
+| CSV-Zeile / Excel-Quellzeile | Anfang | Ende | T-1 | T-2 | Y-Knoten-1 | Leitungsname |
+| --- | --- | --- | --- | --- | --- | --- |
+| Erste Leitungszeile | A | B | C | leer | X | `LONG-NAME` der ersten Excel-Zeile |
+| Zweite Leitungszeile | A | C | leer | leer | leer | `LONG-NAME` der zweiten Zeile + ` (ohne Bein <Roh-ID von B>)` |
+| Dritte Leitungszeile | B | C | leer | leer | leer | `LONG-NAME` der dritten Zeile + ` (ohne Bein <Roh-ID von A>)` |
+
+Anfang, Ende und T-1 werden in den normalen und den `:MJAP-ID`-Spalten mit den
+vollständigen Stations-IDs gefüllt. Y1 enthält einmal die Roh-ID und einmal
+deren vollständige MJAP-ID. **Nur die erste Netzelementzeile trägt den Y-Knoten.**
+In `Stationen.csv` steht X einmal als eigener Stationseintrag. T-2 und Y2
+bleiben bei allen drei Datensätzen leer. Lang- und Kurzname erhalten dieselben
+Zusätze; IDs, Eigentümer, Termine und übrige Attribute bleiben ihrer jeweiligen
+Excel-Quellzeile zugeordnet. Deshalb verändern eine andere Excel-Reihenfolge
+oder unterschiedliche Betriebsdaten der Beine auch die Zuordnung des vollständigen
+Y-Eintrags. Diese fachliche Zuordnung muss in Excel bewusst gepflegt werden.
+
+MJAP erzeugt aus dem ersten Eintrag drei Strecken A–X, B–X und C–X; aus den
+anderen beiden je eine **direkte** Linie A–C und B–C. Die Paarlinien verlaufen
+nicht über X. Insgesamt sind es fünf Linienobjekte mit drei Netzelement-IDs.
+Eine Freischaltung der ersten ID betrifft alle drei Y-Beine; die anderen IDs
+betreffen jeweils nur ihre Paarlinie. Die ursprünglichen Bein-IDs werden
+beibehalten, ihre Verbindungsbedeutung ändert sich jedoch gemäß dieser Tabelle.
+
+Eine Gruppe benötigt genau drei verschiedene äußere Stationen, dieselbe Spannung
+und denselben Leitungstyp (`LINE`, `TIE` oder `DCL`). Fehlende Beine, doppelte
+Endpunkte, mehrere Stromkreise am gleichen Multipod oder vier Beine werden als
+Fehler gemeldet. `--mjap` und `--strict` brechen vor dem Schreiben ab; der normale
+fehlertolerante Modus protokolliert den Fehler. Vier Beine an einem einzigen X
+werden derzeit nicht automatisch konvertiert: T-2 allein genügt im bestehenden
+Plugin nicht, weil dessen Doppel-Y-Topologie zwei Y-Knoten verlangt.
+
+Ein vollständiges [Excel-Dreibein-Beispiel](beispiel/dreibein/README_DE.md)
+zeigt Eingabe, automatisch erzeugte CSVs und den echten MJAP-Prüflauf.
 
 Der direkte MJAP-Import kann außerdem eine zusammengefasste Y-Zeile aufspalten:
 
@@ -291,8 +331,8 @@ Die sechs referenzierten Felder heißen exakt `Station Anfang:MJAP-ID`,
 `Station Ende:MJAP-ID`, `Station T-1:MJAP-ID`, `Station T-2:MJAP-ID`,
 `Y-Knoten-1: MJAP-ID`, `Y-Knoten-2: MJAP-ID`. Bei Y-Feldern steht ein Leerzeichen
 nach dem Doppelpunkt; bei Stationsfeldern nicht. Alle belegten IDs müssen in
-`Stationen.csv` mit gültigen Koordinaten vorkommen. Das zusätzliche Sammeln
-einzelner Parser-Beine in eine neue Y-Zeile ist derzeit nicht implementiert.
+`Stationen.csv` mit gültigen Koordinaten vorkommen. Der Parser befüllt die
+Y-Topologie nach der oben beschriebenen Dreibein-Regel automatisch.
 
 ### 6.2 Mehrfachtermine beim direkten Plugin-Import
 
@@ -689,6 +729,16 @@ der echten QGIS-Umgebung, darunter drei vollständige Visualisierungsassistenten
 läufe. Geprüft wurden Geometrien, Mengen, Joins, Zeitfelder und aktive
 Regelausdrücke. Details stehen im Parser in `MJAP_PRUEFBERICHT_DE.md`.
 
+Die Dreibein-Erweiterung wurde zusätzlich mit 410 Parser-Tests (pandas 3.0.5)
+und 59 Tests in der echten QGIS-/MJAP-Umgebung (pandas 2.2.3), einschließlich
+eines vollständigen Dreibein-Assistentenlaufs, geprüft. Die
+[Dreibein-Prüfdateien](beispiel/dreibein/README_DE.md) enthalten das tatsächliche
+Ergebnis. Vier Stationen und fünf gültige Linienobjekte; die vollständige
+Y-Schaltung und das zugehörige Projekt enthalten jeweils alle drei Y-Beine.
+Der Test prüft auch Quell-IDs, Namen, Stationspaare und leere T-/Y-Felder der
+Paarzeilen. Keine GUI-Warnung, keine kritische Meldung und keine Fehler in den
+geprüften aktiven Regelausdrücken; die bekannte ABN-Datumswarnung bleibt möglich.
+
 Der unterstützte Teststand ist QGIS 3.40.3 / Qt 5 / Python 3.12 / pandas 2.2.3
 für MJAP. Die Parser-Tests laufen zusätzlich mit pandas 3.0.5. Daraus folgt
 keine Freigabe des Plugins für pandas 3 oder QGIS 4 / Qt 6.
@@ -711,7 +761,7 @@ bash scripts/local.sh gui
 
 Nicht zugesichert sind beliebige Fremd-CSV-Zusatzspalten, sämtliche numerischen
 ID-Inferenzfälle, fachlich richtige Schaltungs-/Projektzeiträume, ein automatischer
-Export aller Excel-Blätter, zusammengefasste Parser-Y-Zeilen oder die virtuelle
+Export aller Excel-Blätter, automatische Vierbein-/Mehrfachstromkreis-Gruppen oder die virtuelle
 Zeitreihendarstellung bei NULL-ABN. Die Eingabe kann technisch gültig und fachlich
 trotzdem falsch sein. Dummy-Tests ersetzen keine Abnahme mit echten Netzdaten.
 
