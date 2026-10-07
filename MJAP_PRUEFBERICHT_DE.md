@@ -160,3 +160,43 @@ Prüfungen wiederholen:
 ```bash
 bash scripts/test_mjap.sh tests/testMultipod.py tests/testMjapNetwork.py -o addopts= -q
 ```
+
+
+## Ergänzung vom 07.10.2026: geprüfter Teil-Export und Pflegeberichte
+
+Der CLI-Standard und `--mjap` schließen Elemente mit Datenfehlern oder Datenwarnungen
+aus, einschließlich abhängiger Leitungen, aller Duplikate und ganzer Dreibeine.
+Der verbleibende Bestand wird erneut geprüft und vor Veröffentlichung gegen den
+MJAP-Vertrag validiert. Mehrteilige ABN werden jetzt ebenfalls vor dem Schreiben
+zurückgewiesen. Das MJAP-Plugin selbst wurde nicht verändert.
+
+Automatisch entstehen `Fehlerliste.csv` und `Pflegebericht.html`, auch beim
+Abbruch. Excel-Blatt und physische Zeilennummern bleiben zuordenbar; bei
+Begleit-CSVs werden Dateipfad und physische CSV-Zeilen berichtet, auch bei
+Leerzeilen oder mehrzeiligen Feldern. Die Original-Excel bleibt unverändert.
+
+Nachweise:
+
+- Vollständige Parser-Suite: **453 bestanden, zwei QGIS-Testmodule ohne QGIS übersprungen**.
+- Echte QGIS-3.40.3-/pandas-2.2.3-Umgebung: **107 Tests bestanden**. Der neue
+  vollständige Assistentenfall exportiert einen gemischten Excel-Bestand,
+  schließt drei defekte/abhängige Zeilen aus und erzeugt ohne GUI-Fehlermeldung
+  gültige Layer, Joins, Stile und Zeitfelder aus den verbleibenden Daten.
+- Gemischtes direktes Netz mit erhaltenem Dreibein: fünf CSV-Netzelemente werden
+  im unveränderten MJAP zu sieben Geometrie-/Attributzeilen; kein `KeyError: MJAP-ID`.
+- Neuer Pflege-Testbestand prüft Fehler, Warnungen, Stationsabhängigkeiten,
+  Duplikate, shape-ID-Kollisionen, beschädigte Dreibeine, alle Elemente gesperrt,
+  unveränderte Excel-Eingabe, Berichtsquellen, physische Zeilen und HTML-Maskierung.
+- [Dummy-Beispiel](docs/beispiel/teil-export/README_DE.md): 15 Excel-Datenzeilen,
+  sieben ausgeschlossen, sechs Stationen und zwei Netzelemente veröffentlicht.
+
+Die sechs Warnungen in den QGIS-Tests stammen aus der bekannten pandas-
+Datumsformaterkennung im unveränderten Plugin, einschließlich der gezielten
+Legacy-Fehlerreproduktion. Der vollständige Assistentenfall protokolliert keine
+GUI-Warnung oder kritische Meldung. Diese Bibliotheksdiagnostik ist kein
+elementbezogener Excel-Datenbefund.
+
+Teil-Exportstatus ist **3**; **0** bedeutet keine Ausschlüsse, **2** Abbruch.
+Keine nutzbare Leitung oder eine vollständig geleerte erforderliche Begleittabelle
+führt weiterhin zum Abbruch, damit kein unbrauchbares MJAP-Paket entsteht.
+Der [Pflegeleitfaden](docs/TEIL_EXPORT_UND_PFLEGE_DE.md) erläutert Grenzen und Ablauf.

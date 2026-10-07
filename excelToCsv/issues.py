@@ -64,10 +64,13 @@ class Issue:
     value: object = None
     expected: str = ""
     action: str = ""
+    source: str = ""
 
     def render(self, headline: str) -> str:
         """Build the multi-line log block for this finding."""
         lines = [headline]
+        if self.source:
+            lines.append(f"Source: {self.source}")
         if self.row is not None:
             lines.append(f"Row: {self.row}")
         if self.elementId:

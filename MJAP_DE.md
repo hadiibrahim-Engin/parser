@@ -24,10 +24,15 @@ Unter Windows:
 python converter.py "C:\Daten\input.xlsx" -o "C:\Daten\output" --details
 ```
 
-Der CLI-Standardexport validiert strikt und benötigt keine Begleit-CSV als
-Eingabe. Er schreibt genau Stationen und Netzelemente im Plugin-Format; vorhandene
+Der CLI-Standardexport schließt Elemente mit Datenfehlern oder Datenwarnungen
+und ihre Abhängigkeiten aus und prüft den verbleibenden Bestand erneut.
+Er benötigt keine Begleit-CSV als Eingabe. Neben Stationen und Netzelementen
+entstehen automatisch `Fehlerliste.csv` und `Pflegebericht.html`; vorhandene
 Schaltungs-/Projekttabellen bleiben erhalten. Für den vollständigen Assistenten
 müssen weiterhin alle vier Tabellen mit realen Daten vorhanden sein.
+
+**Exit-Code 3 bedeutet einen veröffentlichten Teil-Export**, 0 einen Export ohne
+Ausschlüsse und 2 einen Abbruch. [Pflegeablauf, Berichtsspalten und Beispiel](docs/TEIL_EXPORT_UND_PFLEGE_DE.md).
 
 Vollständiges Viererpaket:
 

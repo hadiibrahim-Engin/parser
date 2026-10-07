@@ -76,11 +76,15 @@ rows = [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380', 'Latitude': '53
         elementRow(), elementRow(**{'ELEMENT ID': 'TRA_1', 'ELEMENT-TYPE': 'TRA'})]
 if scenario == 'multipod':
     rows = multipodRows()
+if scenario == 'partial':
+    rows += [elementRow(**{'ELEMENT ID': 'BAD_DATE', 'STARTLIFETIME': 'invalid'}),
+             stationRow(**{'ELEMENT ID': 'Pflege', 'Latitude': '50.0', 'Longitude': '8.0'}),
+             elementRow(**{'ELEMENT ID': 'BAD_DEP', 'Station 2': 'Pflege'})]
 if scenario == 'closed-lifetimes':
     for row in rows: row['ENDLIFETIME'] = '2035-12-31'
 workbook = writeExcel(rows, root / 'network.xlsx')
 outagesPath = projectsPath = None
-if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer', 'multipod'):
+if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer', 'multipod', 'partial'):
     outagesPath, projectsPath = root / 'outages.csv', root / 'projects.csv'
     pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TRA_1',
                    'interne ID': 'FS_1', 'von': '01.06.2028', 'bis': '02.06.2028',
@@ -104,8 +108,8 @@ if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer', 'multip
         pd.concat([outages, pd.DataFrame([lineOutage])]).to_csv(outagesPath, index=False)
 source, output = root / 'bundle', root / 'output'
 output.mkdir()
-runConversion(workbook, source, logging.getLogger('probe'), mjap=True,
-              outagesPath=outagesPath, projectsPath=projectsPath)
+conversion = runConversion(workbook, source, logging.getLogger('probe'), mjap=True,
+              outagesPath=outagesPath, projectsPath=projectsPath, excludeFindings=scenario == 'partial')
 plugin = MJAPPlugin(interface)
 plugin.initGui()
 directories = iter([str(source), str(output)])
@@ -114,7 +118,7 @@ with warnings.catch_warnings(record=True) as captured:
     warnings.simplefilter('always')
     plugin.wizard()
 
-report = {'scenario': scenario, 'qgis': Qgis.QGIS_VERSION, 'pandas': pd.__version__,
+report = {'scenario': scenario, 'excluded_rows': conversion.excludedRows, 'qgis': Qgis.QGIS_VERSION, 'pandas': pd.__version__,
           'messages': messages, 'warnings': [str(w.message) for w in captured],
           'layers': {}, 'expression_errors': []}
 switches = 2 if scenario == 'line-and-transformer' else 1

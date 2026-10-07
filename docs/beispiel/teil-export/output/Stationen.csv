@@ -1,0 +1,7 @@
+﻿Eigentümer,MJAP-ID,Stationsname - Langname,lat,long,Spannung,IBN,ABN,Stationsname - Kurzname,reales UW,Stationsname - OPC-Name,ID-GUID intern-1,ID-GUID intern-2,ID-OPC,ID-UCTE,relevant für,ID,Kommentar,IBN - Mehrfach,ABN - Mehrfach
+Amprion,Amprion_Berlin_380,Umspannwerk Berlin,"52,459373","13,361402","[""380""]",09.05.2025,,Umspannwerk Berlin,Wahr,,,,,DBERLIN1,,DBERLIN1,Beispielkommentar,,
+Amprion,Amprion_Hamburg_380,Umspannwerk Berlin,"53,55","9,99","[""380""]",09.05.2025,,Umspannwerk Berlin,Wahr,,,,,DBERLIN1,,DBERLIN1,Beispielkommentar,,
+50Hertz,50Hertz_XStationK_380,Umspannwerk Berlin,"51,1","11,6","[""380""]",09.05.2025,,Umspannwerk Berlin,Falsch,,,,,DBERLIN1,,DBERLIN1,Beispielkommentar,,
+Amprion,Amprion_StationA_380,Umspannwerk A,52,10,"[""380""]",09.05.2025,,Umspannwerk A,Wahr,,,,,DBERLIN1,,DBERLIN1,Beispielkommentar,,
+Amprion,Amprion_StationB_380,Umspannwerk B,53,11,"[""380""]",09.05.2025,,Umspannwerk B,Wahr,,,,,DBERLIN1,,DBERLIN1,Beispielkommentar,,
+Amprion,Amprion_StationC_380,Umspannwerk C,54,12,"[""380""]",09.05.2025,,Umspannwerk C,Wahr,,,,,DBERLIN1,,DBERLIN1,Beispielkommentar,,

@@ -5,7 +5,7 @@
 Dieses Handbuch erklärt die Ein- und Ausgaben beider Programme. Es beschreibt,
 welche Spalten vorhanden sein müssen, welche Werte gebraucht werden, welche
 Werte leer bleiben dürfen und welche Dateien das Plugin selbst erzeugt.
-Stand: 06.10.2026; Parser auf `main` einschließlich der Dreibein-Regel,
+Stand: 07.10.2026; Parser auf `main` einschließlich Dreibein-Regel und geprüftem Teil-Export,
 MJAP-Codebasis `2594712`. Die Dreibein-Änderung betrifft ausschließlich den
 Parser; die Plugin-Implementierung bleibt unverändert.
 
@@ -115,17 +115,39 @@ Vollständig leere Datenzeilen werden übersprungen.
 - Der historische Parser-Modus `--legacy` unterstützt semikolongetrennte Datumswerte. Der geprüfte
   MJAP-Modus dieses Parsers ist auf **einzelne IBN-/ABN-Termine pro Datensatz**
   ausgelegt. Mehrfachtermine gehören nicht zum freigegebenen Excel-Exportweg.
-  Eine mehrteilige ABN wird aktuell nicht in jedem Fall vor dem Schreiben
-  abgefangen; mehrere ABN bei einer IBN können später `explode()` abbrechen.
+  Mehrteilige ABN werden im MJAP-Export vor dem Schreiben zurückgewiesen;
+  im Standard-Teil-Export werden die betroffenen Elemente ausgeschlossen.
 
 ## 4. Parser-Modi und Exportvertrag
 
+Seit 07.10.2026 veröffentlicht der CLI-Standard ausschließlich Elemente ohne
+zugeordneten Datenfehler oder Datenwarnung. Warnungen reichen zur Sperre aus,
+auch bei automatisch reparierten Koordinaten. Abhängige Leitungen, doppelte
+Elementkennungen und ganze Dreibeine werden gemeinsam ausgeschlossen. Die
+restlichen Elemente werden erneut geprüft. Der [Pflegeleitfaden](TEIL_EXPORT_UND_PFLEGE_DE.md)
+beschreibt den vollständigen Ablauf und enthält ein Dummy-Beispiel.
+
+Automatisch entstehen `Fehlerliste.csv` (UTF-8-BOM, Kommatrennung) und
+`Pflegebericht.html` (offline). Beide sind Pflegeartefakte und keine MJAP-Eingaben.
+Der Bericht enthält Status, Anzahlen, Ursachen und Originalwerte mit Excel-Blatt
+und physischer Zeilennummer. Bei Begleit-CSVs wird deren Dateipfad und CSV-Zeile
+angegeben. Die Original-Excel bleibt unverändert.
+
+<!-- TABLE:maintenance -->
+
+`--strict` verlangt für MJAP einen vollständigen Export ohne Datenfehler oder
+Datenwarnungen. Nicht lesbare Eingaben oder fehlende Pflichtspalten führen zum
+Abbruch. Wenn keine Leitung verbleibt, wird kein leeres MJAP-Paket veröffentlicht.
+Das gilt auch für das Viererpaket, wenn keine gültigen Projekte oder Schaltungen
+verbleiben. Ältere CSVs bei einem Abbruch sind kein Ergebnis des aktuellen Laufs.
+
+
 | Modus | Ausgabe | Fehlerverhalten / Zweck |
 | --- | --- | --- |
-| CLI-Standard: Excel + `-o` | Zwei CSVs mit 20 bzw. 30 Spalten | MJAP-Netzformat; strikte Validierung; UTF-8-BOM, Dezimalkomma, echte leere T-/Y-Zellen, passende Mehrfachdatumsfelder |
+| CLI-Standard: Excel + `-o` | Zwei CSVs mit 20 bzw. 30 Spalten | Geprüfter MJAP-Teil-Export; Elemente mit Fehler/Warnung und Abhängigkeiten ausgeschlossen; UTF-8-BOM, Dezimalkomma, echte leere T-/Y-Zellen, passende Mehrfachdatumsfelder |
 | `--legacy` | Zwei CSVs im historischen Format | Fehlertolerant, allgemeine Leerzeichen-Platzhalter; nicht als MJAP-Eingabe verwenden |
 | `--legacy --strict` | Zwei historische CSVs | Fehler führen zum Abbruch; das historische Format wird dadurch nicht MJAP-kompatibel |
-| `--mjap` | Vier CSVs, sofern alle Voraussetzungen erfüllt sind | Strikte Validierung; feste Überschriften; kompatible Typübersetzung und Leerwertbehandlung |
+| `--mjap` | Vier CSVs, sofern alle Voraussetzungen erfüllt sind | Geprüfter Teil-Export aller vier Tabellen; feste Überschriften; kompatible Typübersetzung und Leerwertbehandlung |
 
 Der historische Modus `--legacy` füllt vollständig leere Spalten mit einem
 Leerzeichen. Für Topologiereferenzen ist das im Plugin gefährlich: `notna()`
@@ -256,8 +278,8 @@ beibehalten, ihre Verbindungsbedeutung ändert sich jedoch gemäß dieser Tabell
 Eine Gruppe benötigt genau drei verschiedene äußere Stationen, dieselbe Spannung
 und denselben Leitungstyp (`LINE`, `TIE` oder `DCL`). Fehlende Beine, doppelte
 Endpunkte, mehrere Stromkreise am gleichen Multipod oder vier Beine werden als
-Fehler gemeldet. Der Standardexport und `--mjap` brechen vor dem Schreiben ab;
-`--legacy` ohne `--strict` protokolliert den Fehler. Vier Beine an einem einzigen X
+Fehler gemeldet. Der Standardexport und `--mjap` schließen die gesamte Gruppe aus;
+`--strict` bricht den Export ab. `--legacy` behält das historische Fehlerverhalten. Vier Beine an einem einzigen X
 werden derzeit nicht automatisch konvertiert: T-2 allein genügt im bestehenden
 Plugin nicht, weil dessen Doppel-Y-Topologie zwei Y-Knoten verlangt.
 
@@ -525,9 +547,10 @@ Datumsspalten und einen Beobachtungsbeginn vor dem Beobachtungsende.
   -o output/mjap
 ```
 
-4. Exit-Code und Protokoll prüfen. `0` bedeutet erfolgreicher Parserlauf,
-   `2` bedeutet Konvertierungs-/Validierungsfehler, `1` unerwarteter Fehler
-   oder Abbruch. Warnungen, insbesondere Koordinatenreparaturen, nachprüfen.
+4. Exit-Code und Pflegebericht prüfen. `0` bedeutet Export ohne Ausschlüsse,
+   `3` bedeutet geprüfter Teil-Export mit ausgeschlossenen Elementen;
+   `2` bedeutet Abbruch, `1` unerwarteter Fehler oder Benutzerabbruch.
+   Ausgeschlossene Elemente in der Originalquelle pflegen und erneut exportieren.
    Alle vier CSVs müssen aus demselben beendeten Lauf stammen.
 5. QGIS 3 mit kompatibler MJAP-Umgebung öffnen. Für einen neuen Prüflauf ein
    leeres QGIS-Projekt und einen neuen, vorhandenen Ausgabeordner verwenden.
@@ -720,3 +743,17 @@ Die Dokumentation kann mit `python3 scripts/build_handbook.py` aus der Vorlage
 und dem Feldkatalog neu erzeugt werden. Der Generator prüft die 13 Excel-
 Pflichtüberschriften, die 20/30 CSV-Spalten sowie die Schaltungs-/Projektspalten
 gegen den Parser-Quellcode; Abweichungen führen zum Abbruch der Dokumenterzeugung.
+
+
+## 20. Neuer Nachweis: Teil-Export und Pflege, 07.10.2026
+
+Die aktuelle Prüfung umfasst 453 Parser-Tests (zwei QGIS-Module ohne QGIS
+übersprungen) und 107 Tests in der echten QGIS-/MJAP-Umgebung. Ein zusätzlicher
+vollständiger Assistentenfall mit gemischten gültigen/defekten Excel-Zeilen prüft
+den veröffentlichten Restbestand bis zu Geometrien, Joins, Stilen und Zeitfeldern.
+Die MJAP-Plugin-Implementierung bleibt dabei unverändert.
+
+Der [Pflegeleitfaden](TEIL_EXPORT_UND_PFLEGE_DE.md) und das
+[Dummy-Beispiel](beispiel/teil-export/README_DE.md) zeigen Eingabe, Ausschlüsse und
+beide automatisch erzeugten Berichte. Das Beispiel enthält 15 Excel-Datenzeilen;
+sieben werden ausgeschlossen, sechs Stationen und zwei Netzelemente exportiert.

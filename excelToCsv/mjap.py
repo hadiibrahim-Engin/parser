@@ -84,6 +84,8 @@ def prepareMjapFrames(stations: pd.DataFrame, elements: pd.DataFrame) -> tuple[p
         end = pd.to_datetime(frame['ABN'], format='%d.%m.%Y', errors='coerce')
         if start.isna().any():
             raise ConversionError('The verified MJAP export mode requires a valid IBN date for every station and network element; missing dates cannot be invented.')
+        if (frame['ABN'].str.strip().ne('') & end.isna()).any():
+            raise ConversionError('MJAP requires a single valid ABN date or an empty value.')
         if (start > end).any():
             raise ConversionError('MJAP lifecycle date range is reversed: IBN / ABN.')
     for column in OPTIONAL_REFERENCES:
@@ -124,7 +126,15 @@ def _readCompanion(path: Path | None, columns: tuple[str, ...], required: tuple[
         return pd.DataFrame(columns=list(columns), dtype=object)
     try:
         with path.open(encoding='utf-8-sig', newline='') as handle:
-            headers = next(csv.reader(handle), [])
+            reader = csv.reader(handle)
+            headers = next(reader, [])
+            previousLine = reader.line_num
+            sourceRows = []
+            for record in reader:
+                startLine = previousLine + 1
+                previousLine = reader.line_num
+                if record and not (len(record) == 1 and not record[0].strip()):
+                    sourceRows.append(startLine)
         if len({name.casefold() for name in headers}) != len(headers):
             raise ConversionError(f'{path.name}: duplicate column names are not supported by MJAP.')
         if columns == OUTAGE_COLUMNS:
@@ -135,8 +145,11 @@ def _readCompanion(path: Path | None, columns: tuple[str, ...], required: tuple[
         if collisions:
             raise ConversionError(f'{path.name}: reserved MJAP column(s): {", ".join(sorted(collisions))}')
         frame = pd.read_csv(path, sep=',', encoding='utf-8-sig', dtype=str, keep_default_na=False)
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, csv.Error) as error:
         raise ConversionError(f'Cannot read MJAP companion table {path}: {error}') from error
+    if len(sourceRows) != len(frame):
+        raise ConversionError(f'{path.name}: cannot trace companion records to physical source rows.')
+    frame.attrs['sourceRows'] = sourceRows
     missing = set(required) - set(frame.columns)
     if missing:
         raise ConversionError(f'{path.name}: missing column(s): {", ".join(sorted(missing))}')

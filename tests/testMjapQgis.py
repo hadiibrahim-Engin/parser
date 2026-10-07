@@ -138,3 +138,23 @@ def testLegacySpacesReproduceReportedMjapIdKeyError(application, tmp_path):
     with pytest.raises(KeyError, match='MJAP-ID'):
         gen_attribute_df(so, sk, elements, stations, pd.DataFrame(columns=OUTAGE_COLUMNS),
                          pd.DataFrame(columns=PROJECT_COLUMNS))
+
+
+def testPartialExportSurvivesRealMjapWithoutLosingRetainedElements(application, tmp_path):
+    from mjap_plugin.toolbelt.sharepoint2qgis_v4 import gen_shape_df, gen_multiple_commissionings, gen_attribute_df
+    defective = [
+        elementRow(**{'ELEMENT ID': 'BAD_DATE', 'STARTLIFETIME': 'invalid'}),
+        stationRow(**{'ELEMENT ID': 'Pflege', 'Latitude': '50.0', 'Longitude': '8.0'}),
+        elementRow(**{'ELEMENT ID': 'BAD_DEP', 'Station 2': 'Pflege'}),
+    ]
+    workbook = writeExcel(simpleRows() + multipodRows() + defective, tmp_path/'input.xlsx')
+    output = tmp_path/'csv'
+    assert main([str(workbook), '-o', str(output), '--no-color']) == 3
+    stations = pd.read_csv(output/'Stationen.csv', decimal=',')
+    elements = gen_multiple_commissionings(pd.read_csv(output/'Netzelemente.csv', decimal=','))
+    so, sk = gen_shape_df(stations, elements)
+    assert len(elements) == 5 and len(sk) == 7
+    assert set(sk['MJAP-ID']) == set(elements['MJAP-ID'])
+    _, attributes, _, _ = gen_attribute_df(so, sk, elements, stations,
+        pd.DataFrame(columns=OUTAGE_COLUMNS), pd.DataFrame(columns=PROJECT_COLUMNS))
+    assert len(attributes) == 7

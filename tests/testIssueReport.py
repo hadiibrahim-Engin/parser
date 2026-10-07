@@ -72,7 +72,7 @@ def testReportIsWrittenEvenWhenTheConversionAborts(tmp_path: Path) -> None:
 def testReportCarriesTheFullRowContext(tmp_path: Path) -> None:
     inputFile = writeExcel(brokenRows(), tmp_path / "input.xlsx")
     report = tmp_path / "issues.csv"
-    main([str(inputFile), "-o", str(tmp_path / "out"), "--issue-file", str(report), "--no-color"])
+    main([str(inputFile), "-o", str(tmp_path / "out"), "--issue-file", str(report), "--strict", "--no-color"])
 
     errors = [record for record in readReport(report) if record["Severity"] == SEVERITY_ERROR]
     assert len(errors) == 1

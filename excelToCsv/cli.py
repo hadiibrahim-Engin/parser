@@ -26,6 +26,7 @@ from excelToCsv.schema import DEFAULT_EMPTY_PLACEHOLDER
 EXIT_SUCCESS = 0
 EXIT_UNEXPECTED = 1
 EXIT_CONVERSION_ERROR = 2
+EXIT_PARTIAL_EXPORT = 3
 
 
 def buildParser() -> argparse.ArgumentParser:
@@ -37,7 +38,7 @@ def buildParser() -> argparse.ArgumentParser:
     parser.add_argument("input", type=Path, help="Path to the input Excel file (.xlsx).")
     exportMode = parser.add_mutually_exclusive_group()
     exportMode.add_argument('--mjap', action='store_true',
-                        help='Write an MJAP-compatible four-table bundle; validate strictly.')
+                        help='Write a validated MJAP four-table bundle; exclude elements with findings.')
     exportMode.add_argument('--legacy', action='store_true',
                            help='Use the historical CSV format and lenient validation; not safe for MJAP.')
     parser.add_argument('--freischaltungen', type=Path, dest='outagesPath',
@@ -131,8 +132,8 @@ def buildParser() -> argparse.ArgumentParser:
         "--strict",
         action="store_true",
         help=(
-            "Abort legacy export on validation errors. The default MJAP network "
-            "export and --mjap bundle always validate strictly."
+            "Abort the whole MJAP export on errors or warnings instead of exporting its clean subset. "
+            "Legacy export keeps its historical validation behavior."
         ),
     )
     parser.add_argument(
@@ -244,6 +245,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             mjapNetwork=not arguments.mjap and not arguments.legacy,
             outagesPath=arguments.outagesPath,
             projectsPath=arguments.projectsPath,
+            excludeFindings=not arguments.legacy and not arguments.strict,
+            maintenanceReports=True,
         )
     except ConversionError as exc:
         # The cause has already been logged in full detail. The report matters
@@ -259,6 +262,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_UNEXPECTED
 
     writeReport(arguments.issueFile, result.issues, logger)
-    # The files exist either way; the exit code still reports that the run had
-    # errors, so automation does not mistake a flawed run for a clean one.
+    # A published partial dataset has a distinct status from a failed export.
+    if result.excludedRows or result.excludedCompanionCount:
+        logger.warning('Teil-Export veröffentlicht. Ausgeschlossene Elemente stehen in Fehlerliste.csv und Pflegebericht.html. Exit-Code: 3.')
+        return EXIT_PARTIAL_EXPORT
     return EXIT_CONVERSION_ERROR if result.errorCount else EXIT_SUCCESS

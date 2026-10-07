@@ -7,17 +7,20 @@ a [JSON field inventory](docs/datenvertrag.json) and a
 [verified dummy example](docs/beispiel/README_DE.md).
 
 **MJAP / QGIS:** The simple CLI command now writes two MJAP-compatible network
-tables by default. Use `--legacy` only for the historical general CSV format.
+tables by default, excluding elements with errors or warnings and their dependencies.
+Automatic `Fehlerliste.csv` and `Pflegebericht.html` identify everything to maintain
+in the original Excel input; see [the German maintenance guide](docs/TEIL_EXPORT_UND_PFLEGE_DE.md).
+Use `--legacy` only for the historical general CSV format.
 The optional `--mjap` mode writes a validated four-table bundle. Offline country
 maps for Germany, Netherlands, Belgium and France can be added to an existing
 QGIS project without changing the MJAP plugin. See [MJAP_DE.md](MJAP_DE.md) for
 German instructions, the exact compatibility rules and map commands. Full wizard
 exports require nonempty real switching/project CSVs and valid IBN dates; invalid
-bundles are rejected before writing. See [MJAP_PRUEFBERICHT_DE.md](MJAP_PRUEFBERICHT_DE.md)
+records are excluded and the remaining bundle must pass validation before writing. See [MJAP_PRUEFBERICHT_DE.md](MJAP_PRUEFBERICHT_DE.md)
 for the complete real-QGIS test results.
 
 A production-oriented converter that reads an Excel network inventory and produces
-**exactly two** CSV files: `Stationen.csv` (substations) and `Netzelemente.csv`
+**two MJAP data** CSV files plus automatic maintenance reports: `Stationen.csv` (substations) and `Netzelemente.csv`
 (network elements).
 
 The two output headers are an **immutable external contract**. Spelling, order,
@@ -29,7 +32,7 @@ Three rules drive every design decision:
 
 1. **Never invent a value.** A field without a defined source stays empty.
 2. **Never lose data silently.** Anything unexpected is either a warning or a fatal error.
-3. **Never write a partial result.** A file is either written completely or not at all.
+3. **Publish only a validated subset.** Exclude every element with a finding and its dependent records; publish each complete output file together with the maintenance reports.
 
 ---
 
@@ -95,7 +98,7 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 | `--header-row N` | 1-based Excel row holding the column headers (default: detected automatically) |
 | `--engine` | `auto` (default), `openpyxl` or `calamine` |
 | `--encoding` | Legacy output encoding only; MJAP always uses UTF-8 with BOM |
-| `--strict` | Strict legacy validation; default MJAP export is always strict |
+| `--strict` | Abort the whole MJAP export on any data error or warning; legacy validation remains historical |
 | `--legacy` | Historical general format, including lenient validation and space fillers; not MJAP-safe |
 | `--mjap` | Complete four-table bundle; needs `--freischaltungen` and `--projekte` |
 | `--target-format FILE` | JSON renaming output columns and translating element types |
@@ -111,7 +114,8 @@ Requires Python 3.11+. Mandatory dependencies: `pandas`, `openpyxl`, `colorlog`.
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Clean run — both CSV files written, no errors |
+| `0` | Clean MJAP export — no elements excluded |
+| `3` | Validated partial export published — excluded elements are listed in the automatic reports |
 | `2` | Conversion failed; default MJAP tables are not replaced. Legacy mode may still write invalid records |
 | `1` | Unexpected error (bug); a full traceback is logged |
 
@@ -125,31 +129,17 @@ a station that appears *later* in the spreadsheet.
 
 ```mermaid
 flowchart TD
-    A["Read worksheet raw, no header assumption"] --> B["Locate header row, discard everything above"]
-    B --> C["Normalize column names: trim, canonical spelling"]
-    C --> D{"All required columns present?"}
-    D -->|no| X["Abort: missing input column"]
-    D -->|yes| E["Drop completely empty rows"]
-    E --> F["Normalize ELEMENT-TYPE to uppercase"]
-    F --> G{"All types known?"}
-    G -->|no, default or strict| X2["Abort: unknown ELEMENT-TYPE"]
-    G -->|no, legacy| G2["Report and drop the unclassifiable rows"]
-    G2 --> H["Split rows: SUB vs. everything else"]
-    G -->|yes| H
-    H --> I["Build station records: coordinates, dates, voltages"]
-    I --> J["Build station index: ELEMENT ID to row"]
-    J --> K["Build network element records: references, dates"]
-    K --> L["Validate references, duplicates, output schema"]
-    L --> M{"Any error?"}
-    M -->|yes, strict| X3["Abort: nothing is written"]
-    M -->|yes, legacy| N["Write Stationen.csv and Netzelemente.csv"]
-    M -->|no| N
-    N --> P{"Any error?"}
-    P -->|no| O["Exit code 0"]
-    P -->|yes| Y["Exit code 2"]
-    X --> Y
-    X2 --> Y
-    X3 --> Y
+  A[Read Excel and retain physical row numbers] --> B{Required schema readable?}
+  B -->|no| X[Abort and write maintenance reports]
+  B -->|yes| C[Normalize and validate all elements]
+  C --> D[Exclude elements with errors or warnings]
+  D --> E[Exclude dependent lines and whole multipods]
+  E --> F[Revalidate retained data]
+  F --> G{Usable MJAP network remains?}
+  G -->|no| X
+  G -->|yes| H[Publish validated CSV subset]
+  H --> R[Write Fehlerliste.csv and Pflegebericht.html]
+  R --> S[Exit 0 when clean; 3 for a partial export]
 ```
 
 Why this order matters:
@@ -310,14 +300,13 @@ flowchart LR
 Groups are keyed by the normalized `Multipod` reference and require exactly
 three distinct outer SUB stations, the same voltage and the same line type
 (`LINE`, `TIE` or `DCL`). Incomplete groups, repeated endpoints, several circuits
-sharing one node, and four-leg groups are reported as errors. `--strict` and
-`--mjap` and the default network export abort before writing; `--legacy` without
-`--strict` logs the errors.
+sharing one node, and four-leg groups are reported as errors. The default MJAP network export and `--mjap` exclude the complete group.
+`--strict` aborts the entire export; `--legacy` without `--strict` retains its historical behavior.
 A four-leg star at one node cannot be inferred as MJAP's double-Y, which needs
 two virtual nodes. `Station T-2` alone is insufficient.
 
 A missing referenced SUB node is an error. An existing node without the capital
-X naming convention only warns and is kept unchanged. An empty or absent
+X naming convention yields a warning; the MJAP CLI therefore excludes the affected group. Historical API/legacy conversion keeps the reference unchanged. An empty or absent
 `Multipod` leaves ordinary point-to-point conversion unchanged. `Map Multipod`
 is ignored.
 
@@ -385,7 +374,7 @@ flowchart TD
 
 ### Historical lenient mode (`--legacy`)
 
-The default CLI export is strict and MJAP-safe. The behavior below applies only
+The default CLI export excludes elements with findings and validates the remaining MJAP subset. The behavior below applies only
 to `--legacy` (and the historical Python API default).
 
 In legacy mode an error is **reported, not fatal**: both CSV files are written anyway, and the
@@ -476,7 +465,10 @@ disabled automatically when stderr is not a TTY or `NO_COLOR` is set.
 
 ### Working through the findings
 
-`--issue-file PATH` writes every error and warning of the run to one workable list —
+The CLI always writes `Fehlerliste.csv` and `Pflegebericht.html` into the output directory.
+These are maintenance artifacts, not MJAP input tables.
+
+`--issue-file PATH` additionally writes every error and warning of the run to one workable list —
 **including the run that aborted**, which is exactly the run whose errors need fixing:
 
 ```bash

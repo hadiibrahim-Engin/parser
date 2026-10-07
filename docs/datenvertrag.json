@@ -1,7 +1,7 @@
 {
-  "stand": "2026-10-06",
+  "stand": "2026-10-07",
   "codebasis": {
-    "parser": "main: MJAP-Netzexport als CLI-Standard vom 06.10.2026",
+    "parser": "main: geprüfter Teil-Export und automatische Pflegeberichte vom 07.10.2026",
     "mjap": "2594712"
   },
   "excel": {
@@ -831,5 +831,69 @@
     "base_id",
     "fid",
     "out_idx"
-  ]
+  ],
+  "maintenance": {
+    "columns": [
+      "Spalte der Fehlerliste",
+      "Logischer Typ",
+      "Bedeutung"
+    ],
+    "rows": [
+      [
+        "Schweregrad",
+        "Text",
+        "ERROR oder WARNING"
+      ],
+      [
+        "Quelldatei",
+        "Text",
+        "Excel-Datei oder Begleit-CSV"
+      ],
+      [
+        "Blatt",
+        "Text",
+        "Excel-Blatt; sonst leer"
+      ],
+      [
+        "Quellzeile",
+        "Ganze Zahl / leer",
+        "Physische Quellzeile; bei globalem Befund leer"
+      ],
+      [
+        "ELEMENT ID",
+        "Text",
+        "Ursprüngliche Element-/Projekt-/Schaltungskennung"
+      ],
+      [
+        "ELEMENT-TYPE",
+        "Text",
+        "Normalisierter Typ"
+      ],
+      [
+        "Feld",
+        "Text",
+        "Beanstandete Spalte(n)"
+      ],
+      [
+        "Wert",
+        "Text",
+        "Beanstandeter Original- oder abgeleiteter Wert"
+      ],
+      [
+        "Problem",
+        "Text",
+        "Ursache"
+      ],
+      [
+        "Erwartet",
+        "Text",
+        "Erwartete Regel"
+      ],
+      [
+        "Pflegehinweis",
+        "Text",
+        "Anweisung zur Pflege und Wiederholung"
+      ]
+    ]
+  }
 }

@@ -1,0 +1,21 @@
+{
+  "dummy": true,
+  "excel_input_rows": 15,
+  "exported_stations": 6,
+  "exported_network_elements": 2,
+  "excluded_excel_rows": [
+    6,
+    7,
+    8,
+    9,
+    14,
+    15,
+    16
+  ],
+  "retained_ids": [
+    "Amprion_LINE_471",
+    "Amprion_TRA_1"
+  ],
+  "errors": 6,
+  "warnings": 2
+}

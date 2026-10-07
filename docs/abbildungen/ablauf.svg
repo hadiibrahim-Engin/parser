@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 690" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 840" role="img">
 <title>Der vollständige Datenfluss – Stand des Codes</title>
-<rect width="1400" height="690" fill="#f5f8fa" rx="18"/>
+<rect width="1400" height="840" fill="#f5f8fa" rx="18"/>
 <g font-family="Arial, sans-serif" fill="#173340">
 <text x="32" y="36" font-size="24" font-weight="700" fill="#173340" text-anchor="start">Der vollständige Datenfluss – Stand des Codes</text>
 <rect x="30" y="90" width="255" height="115" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
@@ -14,8 +14,8 @@
 <text x="48" y="390" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Nicht aus Excel abgeleitet</text>
 <rect x="350" y="90" width="240" height="115" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
 <text x="368" y="119" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Parser --mjap</text>
-<text x="368" y="147" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Normalisieren + prüfen</text>
-<text x="368" y="171" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Feste Spalten erzeugen</text>
+<text x="368" y="147" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Prüfen + ausschließen</text>
+<text x="368" y="171" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Restbestand erneut prüfen</text>
 <rect x="655" y="65" width="300" height="235" rx="12" fill="#e1f1ed" stroke="#aac1c8"/>
 <text x="673" y="94" font-size="19" font-weight="700" fill="#173340" text-anchor="start">CSV-Eingabeordner für MJAP</text>
 <text x="673" y="122" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Stationen.csv (20 Spalten)</text>
@@ -65,4 +65,8 @@
 <text x="48" y="582" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Excel allein erzeugt</text>
 <text x="48" y="606" font-size="16" font-weight="400" fill="#173340" text-anchor="start">noch kein vollständiges</text>
 <text x="48" y="630" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Vier-Tabellen-Paket.</text>
+<rect x="30" y="715" width="1340" height="95" rx="12" fill="#fff0d9" stroke="#aac1c8"/>
+<text x="48" y="744" font-size="19" font-weight="700" fill="#173340" text-anchor="start">Automatischer Teil-Export und Pflege</text>
+<text x="48" y="772" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Fehler/Warnungen: ganzes Element, abhängige Leitungen und komplette Dreibeine ausschließen.</text>
+<text x="48" y="796" font-size="16" font-weight="400" fill="#173340" text-anchor="start">Fehlerliste.csv + Pflegebericht.html; Exit 0 = sauber, 3 = Teil-Export, 2 = Abbruch.</text>
 </g></svg>

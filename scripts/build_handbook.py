@@ -47,6 +47,8 @@ def validate_inventory(data):
     for section, constant in [('outages', 'OUTAGE_COLUMNS'), ('projects', 'PROJECT_COLUMNS')]:
         assert tuple(row[0] for row in data[section]['rows']) == contract[constant]
     assert set(data['reserved_outage_columns']) == contract['RESERVED_OUTAGE_COLUMNS']
+    maintenance = source_constants(PARSER / 'excelToCsv/maintenance.py')
+    assert tuple(row[0] for row in data['maintenance']['rows']) == maintenance['CSV_COLUMNS']
     for section in data.values():
         if isinstance(section, dict) and 'rows' in section:
             assert all(len(row) == len(section['columns']) for row in section['rows'])
@@ -97,10 +99,10 @@ def diagrams():
     folder = DOCS / 'abbildungen'
     folder.mkdir(exist_ok=True)
     result = {}
-    d = Diagram(1400, 690, 'Der vollständige Datenfluss – Stand des Codes')
+    d = Diagram(1400, 840, 'Der vollständige Datenfluss – Stand des Codes')
     d.box(30, 90, 255, 115, 'Excel-Netzblatt', ['SUB: Stationen', 'Andere Typen: Elemente'])
     d.box(30, 285, 255, 135, 'Zusätzliche echte Quellen', ['Freischaltungen.csv', 'Projekte.csv', 'Nicht aus Excel abgeleitet'], '#fff0d9')
-    d.box(350, 90, 240, 115, 'Parser --mjap', ['Normalisieren + prüfen', 'Feste Spalten erzeugen'])
+    d.box(350, 90, 240, 115, 'Parser --mjap', ['Prüfen + ausschließen', 'Restbestand erneut prüfen'])
     d.box(655, 65, 300, 235, 'CSV-Eingabeordner für MJAP', ['Stationen.csv (20 Spalten)', 'Netzelemente.csv (30)', 'Freischaltungen.csv', 'Projekte.csv', 'Komma; UTF-8; TT.MM.JJJJ'])
     d.box(1025, 90, 340, 115, 'MJAP: Visualisierung erstellen', ['Vier CSVs einlesen', 'SO/SK und Attribute erstellen'])
     d.box(1025, 355, 340, 135, 'Interne Dateien + Geometrien', ['SO.csv, SK.csv; attribute.xlsx', 'missing_data.xlsx; SK.log', 'Shapefiles + GeoPackages'], '#e9edf8')
@@ -116,12 +118,17 @@ def diagrams():
     d.line(655, 420, 590, 420)
     d.line(470, 490, 470, 560)
     d.box(30, 525, 255, 125, 'Aktuelle Grenze', ['Excel allein erzeugt', 'noch kein vollständiges', 'Vier-Tabellen-Paket.'], '#fff0d9')
+    d.box(30, 715, 1340, 95, 'Automatischer Teil-Export und Pflege',
+          ['Fehler/Warnungen: ganzes Element, abhängige Leitungen und komplette Dreibeine ausschließen.',
+           'Fehlerliste.csv + Pflegebericht.html; Exit 0 = sauber, 3 = Teil-Export, 2 = Abbruch.'], '#fff0d9')
     result['ablauf'] = d.save('ablauf')
     mermaid = '''flowchart LR
   E[Excel: ein Netzblatt] --> P[Parser --mjap]
   F[Echte Freischaltungen.csv] --> P
   J[Echte Projekte.csv] --> P
-  P --> C[Vier CSVs im Eingabeordner]
+  P --> R[Fehlerliste.csv und Pflegebericht.html]
+  P --> A[Elemente mit Befunden und Abhängigkeiten ausschließen]
+  A --> C[Vier geprüfte CSVs im Eingabeordner]
   C --> M[MJAP: Visualisierung erstellen]
   M --> Z[SO/SK und XLSX-Zwischenprodukte]
   Z --> G[Geometrien, Layer, Joins, Stile und Zeitfelder]
@@ -296,7 +303,7 @@ def main():
     content = content.replace("`['380','110']`", '`["380","110"]`')
     (DOCS / 'DATENFLUSS_UND_TABELLEN_DE.md').write_text(content)
     body, toc = render(content, figures)
-    document = f'''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Excel → Parser → MJAP: Datenhandbuch</title><style>{STYLE}</style></head><body><div class="layout"><aside aria-label="Inhaltsverzeichnis"><strong>Datenhandbuch</strong><p>Excel · Parser · MJAP · QGIS<br>Stand 06.10.2026<br>Offline lesbar. Suche mit Strg/Cmd+F; druckbar über den Browser.</p><ol>{toc}</ol></aside><main>{body}</main></div></body></html>'''
+    document = f'''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Excel → Parser → MJAP: Datenhandbuch</title><style>{STYLE}</style></head><body><div class="layout"><aside aria-label="Inhaltsverzeichnis"><strong>Datenhandbuch</strong><p>Excel · Parser · MJAP · QGIS<br>Stand 07.10.2026<br>Offline lesbar. Suche mit Strg/Cmd+F; druckbar über den Browser.</p><ol>{toc}</ol></aside><main>{body}</main></div></body></html>'''
     (DOCS / 'DATENFLUSS_UND_TABELLEN_DE.html').write_text(document)
     print('Handbook generated; 13 Excel fields, 20 station fields, 30 element fields, 9 outage fields and 4 project fields checked against source.')
 

@@ -96,13 +96,14 @@ def testMjapCliWritesFourTables(tmp_path):
     paths = companions(tmp_path)
     assert main([str(workbook), '--mjap', '--freischaltungen', str(paths['outagesPath']),
                  '--projekte', str(paths['projectsPath']), '-o', str(tmp_path / 'out'), '--no-color']) == 0
-    assert len(list((tmp_path / 'out').glob('*.csv'))) == 4
+    assert {p.name for p in (tmp_path / 'out').glob('*.csv')} == {'Stationen.csv', 'Netzelemente.csv', 'Freischaltungen.csv', 'Projekte.csv', 'Fehlerliste.csv'}
 
 
 @pytest.mark.parametrize('change, message', [
     ({'Latitude': '52.459373', 'Longitude': '13.361402'}, 'zero-length'),
     ({'STARTLIFETIME': ''}, 'valid IBN'),
     ({'ENDLIFETIME': '2024-01-01'}, 'reversed'),
+    ({'ENDLIFETIME': '01.01.2026;01.01.2027'}, 'single valid ABN'),
     ({'ELEMENT ID': 'Киев'}, 'CP1252'),
     ({'ELEMENT ID': 'x' * 255}, '254 bytes'),
 ])

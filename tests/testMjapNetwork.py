@@ -15,7 +15,7 @@ def testDefaultCommandWritesOnlySafeNetworkCsvs(tmp_path, source):
     workbook = writeExcel(source(), tmp_path / 'input.xlsx')
     output = tmp_path / 'out'
     assert main([str(workbook), '-o', str(output), '--detail', '--no-color']) == 0
-    assert {p.name for p in output.iterdir()} == {'Stationen.csv', 'Netzelemente.csv'}
+    assert {p.name for p in output.iterdir()} == {'Stationen.csv', 'Netzelemente.csv', 'Fehlerliste.csv', 'Pflegebericht.html'}
     assert (output / 'Stationen.csv').read_bytes().startswith(b'\xef\xbb\xbf')
     stations = pd.read_csv(output / 'Stationen.csv', decimal=',')
     elements = pd.read_csv(output / 'Netzelemente.csv', decimal=',')
@@ -49,9 +49,9 @@ def testDefaultCommandRejectsBrokenInputBeforeReplacingOldCsvs(tmp_path, defect,
     workbook = writeExcel(source, tmp_path / 'input.xlsx')
     output = tmp_path / 'out'; output.mkdir()
     for name in ('Stationen.csv', 'Netzelemente.csv'): (output / name).write_text('previous:'+name)
-    assert main([str(workbook), '-o', str(output), '--details', '--no-color']) == 2
+    assert main([str(workbook), '-o', str(output), '--details', '--strict', '--no-color']) == 2
     assert 'Export aborted:' in capsys.readouterr().err
-    assert {p.name:p.read_text() for p in output.iterdir()} == {
+    assert {name:(output/name).read_text() for name in ('Stationen.csv', 'Netzelemente.csv')} == {
         name:'previous:'+name for name in ('Stationen.csv', 'Netzelemente.csv')}
 
 

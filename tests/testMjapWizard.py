@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip('qgis.core')
 
 
-@pytest.mark.parametrize('scenario', ['populated', 'closed-lifetimes', 'line-and-transformer', 'multipod'])
+@pytest.mark.parametrize('scenario', ['populated', 'closed-lifetimes', 'line-and-transformer', 'multipod', 'partial'])
 def testFullWizardHasValidLayersJoinsStylesAndNoErrorMessages(tmp_path, scenario):
     result = subprocess.run([sys.executable, '-X', 'faulthandler',
                              str(Path(__file__).with_name('mjapWizardProbe.py')),
@@ -21,3 +21,4 @@ def testFullWizardHasValidLayersJoinsStylesAndNoErrorMessages(tmp_path, scenario
     # No dtype FutureWarning is allowed: the parser keeps the column textual.
     assert all(warning.startswith('Could not infer format,') for warning in report['warnings'])
     if scenario == 'closed-lifetimes': assert report['warnings'] == []
+    if scenario == 'partial': assert report['excluded_rows'] == [6, 7, 8]
