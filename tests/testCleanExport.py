@@ -19,12 +19,11 @@ def reports(output):
         return list(csv.DictReader(handle))
 
 
-@pytest.mark.parametrize('defect', ['unknown-type', 'missing-ref', 'unknown-ref', 'invalid-date',
+@pytest.mark.parametrize('defect', ['missing-ref', 'unknown-ref', 'invalid-date',
                                   'missing-ibn', 'reversed-dates', 'unsafe-id', 'identical-ends', 'multiple-abn'])
 def testBadElementIsExcludedAndGoodElementsArePublished(tmp_path, defect):
     source = rows()
     bad = elementRow(**{'ELEMENT ID': 'BAD'})
-    if defect == 'unknown-type': bad['ELEMENT-TYPE'] = 'NO_SUCH_TYPE'
     if defect == 'missing-ref': bad['Station 2'] = ''
     if defect == 'unknown-ref': bad['Station 2'] = 'Missing_380'
     if defect == 'invalid-date': bad['STARTLIFETIME'] = '31.02.2025'
@@ -38,7 +37,7 @@ def testBadElementIsExcludedAndGoodElementsArePublished(tmp_path, defect):
     output = tmp_path/'output'
     assert main([str(workbook), '-o', str(output), '--detail', '--no-color']) == 3
     assert workbook.read_bytes() == original
-    assert pd.read_csv(output/'Netzelemente.csv')['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TRA_1']
+    assert pd.read_csv(output/'Netzelemente.csv')['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TIE_1']
     records = reports(output)
     assert any(record['ELEMENT ID'] == bad['ELEMENT ID'] and record['Quellzeile'] == '6' for record in records)
     assert all(record['Pflegehinweis'] for record in records)
@@ -73,9 +72,42 @@ def testWholeDreibeinIsExcludedAndUnrelatedNetworkSurvives(tmp_path, logger, def
     if defect == 'bad-outer': pod[3]['TSO'] = ''
     workbook = writeExcel(rows() + pod, tmp_path/'source.xlsx')
     result = runConversion(workbook, tmp_path/'out', logger, mjapNetwork=True, excludeFindings=True)
-    assert result.networkElements['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TRA_1']
+    assert result.networkElements['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TIE_1']
     badIds = {issue.elementId for _, issue in result.issues}
     assert {record['ELEMENT ID'] for record in pod if record['ELEMENT-TYPE'] != 'SUB'} <= badIds
+
+
+def testGroupIdIsNotAStationDependency(tmp_path, logger):
+    bad = stationRow(**{'ELEMENT ID': 'BAD_380', 'Latitude': 'invalid', 'Multipod': 'BAD_380'})
+    pod = multipodRows(node='YNode_380', groupId='BAD_380')
+    workbook = writeExcel(rows() + [bad] + pod, tmp_path / 'input.xlsx')
+    result = runConversion(workbook, tmp_path / 'out', logger,
+                           mjapNetwork=True, excludeFindings=True)
+    assert result.excludedRows == [6]
+    assert len(result.networkElements) == 5
+    assert result.networkElements.iloc[2]['Y-Knoten-1'] == 'YNode_380'
+
+
+def testInvalidYNodeExcludesAllLegsEvenWithUnrelatedGroupId(tmp_path, logger):
+    pod = multipodRows(node='YNode_380')
+    pod[0]['Latitude'] = 'invalid'
+    workbook = writeExcel(rows() + pod, tmp_path / 'input.xlsx')
+    result = runConversion(workbook, tmp_path / 'out', logger,
+                           mjapNetwork=True, excludeFindings=True)
+    assert result.networkElements['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TIE_1']
+    assert {6, 10, 11, 12} <= set(result.excludedRows)
+
+
+def testExcludedCircuitDoesNotChangeSurvivingNodeIdentity(tmp_path, logger):
+    pod = multipodRows(node='NodeWithoutVoltageSuffix')
+    pod[-1]['STARTLIFETIME'] = 'invalid'
+    workbook = writeExcel(rows() + pod, tmp_path / 'input.xlsx')
+    result = runConversion(workbook, tmp_path / 'out', logger,
+                           mjapNetwork=True, excludeFindings=True)
+    assert result.excludedRows == [10, 11, 12]
+    node = result.stations.loc[result.stations['MJAP-ID'] == '50Hertz_NodeWithoutVoltageSuffix'].iloc[0]
+    assert node['reales UW'] == 'Falsch'
+    assert node['Stationsname - Langname'] == pod[0]['LONG-NAME']
 
 
 def testEveryIdenticalDuplicateIsExcludedWithoutDroppingUnrelatedLines(tmp_path, logger):

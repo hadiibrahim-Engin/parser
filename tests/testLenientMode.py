@@ -140,9 +140,8 @@ def testUnknownElementTypeRowIsDropped(
 
     assert len(result.networkElements) == 1, "the unclassifiable row is not written"
     assert list(result.networkElements["Element Typ"]) == ["LINE"]
-    assert result.errorCount == 1
-    assert "Skipping 1 row(s) with an unknown ELEMENT-TYPE" in logCapture.text(logging.WARNING)
-    assert "Unknown ELEMENT-TYPE." in logCapture.text(logging.ERROR)
+    assert result.errorCount == result.warningCount == 0
+    assert "Ignoring 1 input row(s)" in logCapture.text(logging.INFO)
 
 
 def testDroppedRowsDoNotShiftTheOthers(logger: logging.Logger) -> None:

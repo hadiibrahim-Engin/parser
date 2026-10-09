@@ -10,12 +10,12 @@ from excelToCsv.cli import main
 
 def rows():
     return [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380', 'Latitude': '53.55', 'Longitude': '9.99'}), elementRow(),
-            elementRow(**{'ELEMENT ID': 'TRA_1', 'ELEMENT-TYPE': 'TRA'})]
+            elementRow(**{'ELEMENT ID': 'TIE_1', 'ELEMENT-TYPE': 'TIE'})]
 
 
 def companions(tmp_path):
     outages, projects = tmp_path / 'outages.csv', tmp_path / 'projects.csv'
-    pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TRA_1',
+    pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TIE_1',
                    'interne ID': 'FS_1', 'von': '01.06.2028', 'bis': '02.06.2028',
                    'Projekt': 'Demo'}]).to_csv(outages, index=False)
     pd.DataFrame([{'Projektname': 'Demo', 'betroffener Standort': 'Amprion_Berlin_380',
@@ -36,7 +36,7 @@ def testMjapCsvValuesPreserveDatesAndUnusedTopology(tmp_path, logger):
     assert elements['Y-Knoten-1: MJAP-ID'].isna().all()
     assert elements['IBN - Mehrfach'].str.split(';').tolist() == [['09.05.2025']] * 2
     assert elements['ABN - Mehrfach'].str.split(';').tolist() == [[' ']] * 2
-    assert elements['Element Typ'].tolist() == ['Stromkreis', 'Trafo']
+    assert elements['Element Typ'].tolist() == ['Stromkreis', 'Kuppelleitung']
     assert set(p.name for p in output.glob('*.csv')) == {
         'Stationen.csv', 'Netzelemente.csv', 'Freischaltungen.csv', 'Projekte.csv'}
     assert len(pd.read_csv(output / 'Freischaltungen.csv')) == 1
@@ -70,7 +70,7 @@ def testMjapRejectsBrokenReferencesInLenientMode(tmp_path, logger):
 
 
 def testMjapRejectsUnrenderableSingleEndedAssets(tmp_path, logger):
-    source = [*rows(), elementRow(**{'ELEMENT ID': 'GEN_1', 'ELEMENT-TYPE': 'GEN', 'Station 2': ''})]
+    source = [*rows(), elementRow(**{'ELEMENT ID': 'BUB_1', 'ELEMENT-TYPE': 'BUB', 'Station 2': ''})]
     workbook = writeExcel(source, tmp_path / 'network.xlsx')
     with pytest.raises(ConversionError, match='both ends'):
         runConversion(workbook, tmp_path / 'out', logger, mjap=True)
@@ -80,7 +80,7 @@ def testMjapReadsCompanionTablesAndNormalizesProjectReferences(tmp_path, logger)
     workbook = writeExcel(rows(), tmp_path / 'network.xlsx')
     outages = tmp_path / 'outages.csv'
     projects = tmp_path / 'projects.csv'
-    pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TRA_1',
+    pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TIE_1',
                    'interne ID': 'FS_1', 'von': '01.06.2028', 'bis': '02.06.2028',
                    'Projekt': 'Demo'}]).to_csv(outages, index=False)
     pd.DataFrame([{'Projektname': 'Demo', 'betroffener Standort': 'Amprion_Berlin_380, Amprion_Hamburg_380',

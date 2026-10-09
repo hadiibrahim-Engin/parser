@@ -34,7 +34,7 @@ def readReport(path: Path) -> list[dict[str, str]]:
 def brokenRows() -> list[dict[str, object]]:
     """One warning (station id convention) and one fatal error (dangling reference)."""
     return [
-        stationRow(**{"ELEMENT ID": "Berlin", RELEVANCE: 1}),
+        stationRow(**{"ELEMENT ID": "Berlin", RELEVANCE: "R"}),
         elementRow(**{"Station 1": "Berlin", "Station 2": "GibtsNicht_380"}),
     ]
 

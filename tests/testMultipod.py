@@ -11,7 +11,7 @@ from excelToCsv.mjap import prepareMjapFrames
 VIRTUAL_STATION = 'XStationK_380'
 
 
-def multipodRows(node=VIRTUAL_STATION):
+def multipodRows(node=VIRTUAL_STATION, groupId='CIRCUIT_123'):
     stations = [stationRow(**{'ELEMENT ID': node, 'TSO': '50Hertz',
                              'Latitude': '51.1', 'Longitude': '11.6'})]
     stations += [stationRow(**{'ELEMENT ID': f'Station{x}_380',
@@ -20,7 +20,7 @@ def multipodRows(node=VIRTUAL_STATION):
                  for i, x in enumerate('ABC')]
     legs = [elementRow(**{'ELEMENT ID': f'LINE_00{i + 1}', 'LONG-NAME': 'Leitung xy',
                          'Station 1': node, 'Station 2': f'Station{x}_380',
-                         'Multipod': node, 'UCTE CODE': f'DL00{i + 1}'})
+                         'Multipod': groupId, 'UCTE CODE': f'DL00{i + 1}'})
             for i, x in enumerate('ABC')]
     return stations + legs
 
@@ -66,11 +66,38 @@ def testReversedLegDirectionsHaveSameTopology(logger):
     assert convertRows(rows, logger).networkElements.equals(expected)
 
 
-@pytest.mark.parametrize('node', ['StationK_380', 'StationK'])
+def testMixedDirectionsAndInterleavedRowsKeepSourceAttributes(logger):
+    rows = multipodRows(node='YNode')
+    rows[-2]['Station 1'], rows[-2]['Station 2'] = rows[-2]['Station 2'], rows[-2]['Station 1']
+    reordered = [rows[4], rows[2], rows[5], rows[0], rows[3], rows[6], rows[1]]
+    result = convertRows(reordered, logger)
+    assert result.networkSourceRows == [2, 4, 7]
+    assert result.networkElements.iloc[0]['Y-Knoten-1'] == 'YNode'
+    assert result.networkElements['ID-UCTE'].tolist() == ['DL001', 'DL002', 'DL003']
+    assert result.stations.loc[result.stations['MJAP-ID'] == '50Hertz_YNode', 'reales UW'].item() == 'Falsch'
+
+
+def testIndependentCircuitsMayShareTheSameVirtualNode(logger):
+    rows = multipodRows(node='YNode_380')
+    otherLegs = [{**row, 'ELEMENT ID': 'OTHER_' + row['ELEMENT ID'], 'Multipod': 'OTHER_CIRCUIT'}
+                 for row in rows[-3:]]
+    result = convertRows(rows + otherLegs, logger)
+    assert result.networkElements['Y-Knoten-1'].tolist() == ['YNode_380', '', '', 'YNode_380', '', '']
+    assert result.errorCount == result.warningCount == 0
+
+
+def testGroupIdMatchingAnOuterStationStillUsesTheCommonNode(logger):
+    result = convertRows(multipodRows(groupId='StationA_380'), logger)
+    assert result.networkElements.iloc[0]['Y-Knoten-1'] == VIRTUAL_STATION
+
+
+@pytest.mark.parametrize('node', ['YStationK_380', 'StationK_380', 'StationK'])
 def testExistingNodeIsNeverRenamed(logger, logCapture, node):
     result = convertRows(multipodRows(node), logger)
     assert result.networkElements.iloc[0]['Y-Knoten-1'] == node
-    assert 'does not follow the expected virtual-station X naming convention' in logCapture.text(logging.WARNING)
+    assert result.stations.iloc[0]['reales UW'] == 'Falsch'
+    assert result.stations.iloc[0]['Stationsname - Langname'] == 'Umspannwerk Berlin'
+    assert result.warningCount == result.errorCount == 0
 
 
 @pytest.mark.parametrize('count', [1, 2, 4, 6])
@@ -90,17 +117,24 @@ def testInvalidTopologyFails(logger, logCapture, defect):
     if defect == 'node-not-end': rows[-1]['Station 1'] = 'StationB_380'
     if defect == 'loop': rows[-1]['Station 2'] = VIRTUAL_STATION
     if defect == 'mixed-voltage': rows[-1]['VOLTAGE-LEVEL'] = '220'
-    if defect == 'mixed-type': rows[-1]['ELEMENT-TYPE'] = 'TRA'
+    if defect == 'mixed-type': rows[-1]['ELEMENT-TYPE'] = 'TIE'
     if defect == 'missing-end': rows[-1]['Station 2'] = 'Missing_380'
     with pytest.raises(ConversionError): convertRows(rows, logger)
     assert 'Multipod must describe exactly three unambiguous line legs.' in logCapture.text(logging.ERROR)
 
 
-def testUnknownMultipodReferenceFails(logger, logCapture):
+def testGroupIdNeedNotReferenceAStation(logger):
     rows = multipodRows()
     for row in rows[-3:]: row['Multipod'] = 'XDoesNotExist_380'
-    with pytest.raises(ConversionError): convertRows(rows, logger)
-    assert 'Multipod references an unknown virtual station.' in logCapture.text(logging.ERROR)
+    result = convertRows(rows, logger)
+    assert result.networkElements.iloc[0]['Y-Knoten-1'] == VIRTUAL_STATION
+    assert result.errorCount == result.warningCount == 0
+
+
+def testMissingNodeSubRowFails(logger, logCapture):
+    with pytest.raises(ConversionError):
+        convertRows(multipodRows()[1:], logger)
+    assert 'Multipod must describe exactly three unambiguous line legs.' in logCapture.text(logging.ERROR)
 
 
 @pytest.mark.parametrize('omit', [False, True])
@@ -127,7 +161,7 @@ def testMapMultipodIsIgnored(logger):
 
 def testSeparateNodesDoNotMixGroups(logger):
     first = multipodRows()
-    second = multipodRows('XOther_380')
+    second = multipodRows('XOther_380', groupId='CIRCUIT_OTHER')
     for row in second[1:]:
         row['ELEMENT ID'] = 'Other' + row['ELEMENT ID']
         if row['ELEMENT-TYPE'] == 'LINE': row['Station 2'] = 'Other' + row['Station 2']

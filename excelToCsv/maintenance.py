@@ -2,15 +2,40 @@
 from __future__ import annotations
 
 import csv
+import re
 from collections import Counter
 from datetime import datetime
 from html import escape
 from pathlib import Path
 
-from excelToCsv.issues import formatValue, sortIssues
+from openpyxl.utils import get_column_letter
 
-CSV_COLUMNS = ('Schweregrad', 'Quelldatei', 'Blatt', 'Quellzeile', 'ELEMENT ID',
+from excelToCsv.issues import Issue, formatValue, sortIssues
+
+CSV_COLUMNS = ('Schweregrad', 'Quelldatei', 'Blatt', 'Quellzeile', 'Fundstelle', 'ELEMENT ID',
                'ELEMENT-TYPE', 'Feld', 'Wert', 'Problem', 'Erwartet', 'Pflegehinweis')
+
+
+def sourceLocation(issue: Issue, sheet: str, columnLetters: dict[str, str]) -> str:
+    """Render the physical input location without substituting an output row.
+
+    Match a complete heading before splitting composite fields, since relevance
+    headings themselves may contain slashes or commas.
+    """
+    if issue.row is None:
+        return 'Tabellenstruktur / Exportkonfiguration (keine einzelne Quellzeile)'
+    if issue.source:
+        return f'CSV-Zeile {issue.row}'
+    fields = ([issue.field] if issue.field in columnLetters
+              else re.split(r',\s*| / ', issue.field))
+    cells = [f'{columnLetters[field]}{issue.row}' for field in fields if field in columnLetters]
+    prefix = f'Excel-Zeile {issue.row}'
+    if not sheet:
+        return prefix
+    quotedSheet = "'" + sheet.replace("'", "''") + "'"
+    if not cells:
+        return f'{prefix}, Blatt {quotedSheet}'
+    return f'{prefix}: ' + ', '.join(f'{quotedSheet}!{cell}' for cell in cells)
 
 
 def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, published):
@@ -19,13 +44,17 @@ def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, publ
     outputDir.mkdir(parents=True, exist_ok=True)
     ordered = sortIssues(issues)
     sheet = table.sheetName if table is not None else ''
+    columnLetters = ({str(column): get_column_letter(position + 1)
+                      for position, column in enumerate(table.frame.columns)}
+                     if table is not None else {})
     csvPath = outputDir / 'Fehlerliste.csv'
     with csvPath.open('w', encoding='utf-8-sig', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(CSV_COLUMNS)
         for severity, issue in ordered:
             writer.writerow((severity, issue.source or str(Path(inputPath).resolve()), '' if issue.source else sheet,
-                             issue.row if issue.row is not None else '', issue.elementId,
+                             issue.row if issue.row is not None else '',
+                             sourceLocation(issue, sheet, columnLetters), issue.elementId,
                              issue.elementType, issue.field,
                              formatValue(issue.value) if issue.field else '', issue.problem,
                              issue.expected, issue.action or 'Excel-Eingabe korrigieren und erneut exportieren.'))
@@ -50,10 +79,13 @@ def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, publ
                    'Ein Teil-Export ersetzt die CSV-Tabellen vollständig durch den verbleibenden geprüften Bestand; '
                    'ausgeschlossene Elemente fehlen entsprechend in der Karte.</p>')
     rows = ''.join('<tr>' + ''.join(f'<td>{e(value)}</td>' for value in (
-        severity, issue.source or str(Path(inputPath).name), issue.row or '', issue.elementId, issue.elementType, issue.field,
+        severity, issue.source or str(Path(inputPath).resolve()), '' if issue.source else sheet,
+        issue.row if issue.row is not None else '', sourceLocation(issue, sheet, columnLetters),
+        issue.elementId, issue.elementType, issue.field,
         formatValue(issue.value) if issue.field else '', issue.problem, issue.expected, issue.action,
     )) + '</tr>' for severity, issue in ordered)
-    headers = ('Schweregrad', 'Quelldatei', 'Quellzeile', 'ELEMENT ID', 'Typ', 'Feld', 'Wert', 'Problem', 'Erwartet', 'Pflegehinweis')
+    headers = ('Schweregrad', 'Quelldatei', 'Blatt', 'Quellzeile', 'Fundstelle',
+               'ELEMENT ID', 'Typ', 'Feld', 'Wert', 'Problem', 'Erwartet', 'Pflegehinweis')
     tableHtml = '<table><thead><tr>' + ''.join(f'<th>{e(col)}</th>' for col in headers) + '</tr></thead><tbody>' + rows + '</tbody></table>'
     originals = []
     if table is not None:

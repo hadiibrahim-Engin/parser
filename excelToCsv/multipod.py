@@ -5,11 +5,12 @@ from collections import Counter
 from dataclasses import dataclass
 
 from excelToCsv.context import ConversionContext, RowSet
-from excelToCsv.normalize import normalizeVoltage
-from excelToCsv.reader import columnValues, textColumn
+from excelToCsv.normalize import normalizeElementType, normalizeVoltage
+from excelToCsv.reader import InputTable, columnValues, textColumn
 from excelToCsv.schema import (
-    COL_MULTIPOD, COL_STATION_1, COL_STATION_2, COL_VOLTAGE_LEVEL,
-    MULTIPOD_ELEMENT_TYPES,
+    COL_ELEMENT_ID, COL_ELEMENT_TYPE, COL_MULTIPOD,
+    COL_STATION_1, COL_STATION_2, COL_VOLTAGE_LEVEL,
+    MULTIPOD_ELEMENT_TYPES, STATION_TYPE,
 )
 
 
@@ -21,6 +22,39 @@ class MultipodGroup:
     sourceRows: tuple[int, ...]
     nodeId: str
     outerStationIds: tuple[str, ...]
+
+
+def findMultipodSummaryRows(table: InputTable) -> set[int]:
+    """Identify redundant circuit rows before validating missing endpoints.
+
+    A summary's ELEMENT ID matches the Multipod ID declared by other line
+    legs. SUB rows are stations, never summaries. A connected member is kept
+    when it could be one of the three legs; three other legs must exist before
+    a connected row can be considered redundant. Group validation is separate:
+    defective or incomplete legs still produce their own findings.
+    """
+    pods = textColumn(table.frame, COL_MULTIPOD)
+    if not any(pods):
+        return set()
+    types = [normalizeElementType(value)
+             for value in columnValues(table.frame, COL_ELEMENT_TYPE)]
+    ids = textColumn(table.frame, COL_ELEMENT_ID)
+    legCounts = Counter(
+        pod for kind, identifier, pod in zip(types, ids, pods)
+        if kind in MULTIPOD_ELEMENT_TYPES and pod and identifier != pod
+    )
+    if not legCounts:
+        return set()
+    starts = textColumn(table.frame, COL_STATION_1)
+    ends = textColumn(table.frame, COL_STATION_2)
+    return {
+        int(table.rowNumbers[position])
+        for position, identifier in enumerate(ids)
+        if types[position] != STATION_TYPE
+        and identifier in legCounts
+        and pods[position] in ('', identifier)
+        and ((not starts[position] and not ends[position]) or legCounts[identifier] >= 3)
+    }
 
 
 def detectMultipodGroups(
@@ -38,6 +72,8 @@ def detectMultipodGroups(
     for position, identifier in enumerate(textColumn(rows.frame, COL_MULTIPOD)):
         if identifier:
             positionsById.setdefault(identifier, []).append(position)
+    if not positionsById:
+        return []
 
     starts = textColumn(rows.frame, COL_STATION_1)
     ends = textColumn(rows.frame, COL_STATION_2)

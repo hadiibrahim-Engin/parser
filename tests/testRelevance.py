@@ -15,49 +15,41 @@ RELEVANCE_AMPRION = "Interesting/Relevant for (Amprion)"
 RELEVANCE_TENNET = "Interesting/Relevant for (TennetD)"
 
 
-def testRelevantForFromZeroAndOne(logger: logging.Logger) -> None:
-    """Case 19: 0/1 as the boolean source."""
-    row = stationRow(
-        **{RELEVANCE_50HERTZ: 1, RELEVANCE_AMPRION: 0, RELEVANCE_TENNET: 1}
-    )
-    result = convertRows([row], logger)
-    assert result.stations.iloc[0]["relevant für"] == "50Hertz;TennetD"
+def testInterestingAndRelevantHaveTheSameOutput(logger):
+    interesting = stationRow(**{RELEVANCE_50HERTZ: "I", RELEVANCE_AMPRION: 0, RELEVANCE_TENNET: "R"})
+    relevant = {**interesting, RELEVANCE_50HERTZ: "R", RELEVANCE_TENNET: "I"}
+    assert convertRows([interesting], logger).stations.equals(convertRows([relevant], logger).stations)
+    assert convertRows([interesting], logger).stations.iloc[0]["relevant für"] == "50Hertz;TennetD"
 
 
-def testRelevantForFromTrueAndFalse(logger: logging.Logger) -> None:
-    """Case 20: True/False as the boolean source."""
-    row = stationRow(
-        **{RELEVANCE_50HERTZ: "True", RELEVANCE_AMPRION: "false", RELEVANCE_TENNET: True}
-    )
-    result = convertRows([row], logger)
-    assert result.stations.iloc[0]["relevant für"] == "50Hertz;TennetD"
-
-
-@pytest.mark.parametrize("marker", ["1", 1, "R", "l", "x", "X", "ja", "true", "maybe", "2", True])
-def testEveryMarkerExceptZeroCountsAsRelevant(
-    marker: object, logger: logging.Logger
-) -> None:
-    """The column is a free-text tick box, so only an explicit zero opts out."""
+@pytest.mark.parametrize("marker", ["I", "R", "i", "r", " I ", " r "])
+def testInterestingAndRelevantMarkersIncludeOrganisation(marker, logger):
     row = stationRow(**{RELEVANCE_50HERTZ: marker, RELEVANCE_AMPRION: 0})
-    assert convertRows([row], logger).stations.iloc[0]["relevant für"] == "50Hertz"
+    result = convertRows([row], logger)
+    assert result.stations.iloc[0]["relevant für"] == "50Hertz"
+    assert result.issues == []
 
 
-@pytest.mark.parametrize("marker", ["0", 0, 0.0, "0.0", "false", "False", "nein", "", None])
-def testZeroAndBlankAreNotRelevant(marker: object, logger: logging.Logger) -> None:
+@pytest.mark.parametrize("marker", ["0", 0, 0.0, "0.0", " 0 ", "", None])
+def testZeroAndBlankAreNotRelevant(marker, logger):
     row = stationRow(**{RELEVANCE_50HERTZ: marker, RELEVANCE_AMPRION: "R"})
     assert convertRows([row], logger).stations.iloc[0]["relevant für"] == "Amprion"
 
 
-def testFreeTextMarkersNeverWarn(
-    logger: logging.Logger, logCapture: RecordingHandler
-) -> None:
-    """Arbitrary markers are the normal case now - they must not produce noise."""
-    row = stationRow(**{RELEVANCE_50HERTZ: "R", RELEVANCE_AMPRION: "l"})
-    result = convertRows([row], logger)
+@pytest.mark.parametrize("marker", ["x", "l", "maybe", "1", 1, True, False, "false", "nein"])
+def testUnknownMarkersReportExactSourceContext(marker, logger):
+    from excelToCsv.errors import ConversionError
 
-    assert result.stations.iloc[0]["relevant für"] == "50Hertz;Amprion"
-    assert "Unrecognized" not in logCapture.text(logging.WARNING)
-    assert result.warningCount == 0
+    row = stationRow(**{RELEVANCE_50HERTZ: marker})
+    with pytest.raises(ConversionError) as failure:
+        convertRows([row], logger)
+    severity, issue = failure.value.issues[0]
+    assert severity == "ERROR"
+    assert issue.problem == "Unknown relevance marker."
+    assert issue.row == 2 and issue.elementId == "Berlin_380"
+    assert issue.field == RELEVANCE_50HERTZ
+    assert issue.value == marker
+    assert "I (interesting) or R (relevant)" in issue.expected
 
 
 def testEmptyRelevanceProducesAnEmptyField(logger: logging.Logger) -> None:
@@ -71,7 +63,7 @@ def testRelevanceAppliesToNetworkElementsToo(logger: logging.Logger) -> None:
         stationRow(**{RELEVANCE_50HERTZ: 0}),
         stationRow(**{"ELEMENT ID": "Hamburg_380", "Latitude": "53.5", "Longitude": "9.9",
                       RELEVANCE_50HERTZ: 0}),
-        elementRow(**{RELEVANCE_50HERTZ: 1}),
+        elementRow(**{RELEVANCE_50HERTZ: "I"}),
     ]
     result = convertRows(rows, logger)
     assert result.networkElements.iloc[0]["relevant für"] == "50Hertz"
@@ -90,7 +82,7 @@ def testSeveralOrganisationsApplyToNetworkElements(logger: logging.Logger) -> No
                 RELEVANCE_50HERTZ: 0,
             }
         ),
-        elementRow(**{RELEVANCE_50HERTZ: 1, RELEVANCE_TENNET: 1}),
+        elementRow(**{RELEVANCE_50HERTZ: "I", RELEVANCE_TENNET: "R"}),
     ]
     result = convertRows(rows, logger)
     assert result.networkElements.iloc[0]["relevant für"] == "50Hertz;TennetD"
@@ -127,7 +119,7 @@ def testLabelExtractionFallsBackToKeywordStripping() -> None:
 
 def testSeveralOrganisationsAreJoinedBySemicolon(logger: logging.Logger) -> None:
     """Three hits become one field, separated by semicolons, in column order."""
-    row = stationRow(**{RELEVANCE_50HERTZ: 1, RELEVANCE_AMPRION: 1, RELEVANCE_TENNET: 1})
+    row = stationRow(**{RELEVANCE_50HERTZ: "I", RELEVANCE_AMPRION: "R", RELEVANCE_TENNET: "R"})
     result = convertRows([row], logger)
 
     value = result.stations.iloc[0]["relevant für"]
@@ -136,7 +128,7 @@ def testSeveralOrganisationsAreJoinedBySemicolon(logger: logging.Logger) -> None
 
 
 def testSingleOrganisationHasNoSeparator(logger: logging.Logger) -> None:
-    row = stationRow(**{RELEVANCE_50HERTZ: 0, RELEVANCE_AMPRION: 1, RELEVANCE_TENNET: 0})
+    row = stationRow(**{RELEVANCE_50HERTZ: 0, RELEVANCE_AMPRION: "R", RELEVANCE_TENNET: 0})
     assert convertRows([row], logger).stations.iloc[0]["relevant für"] == "Amprion"
 
 
@@ -146,7 +138,7 @@ def testRelevanceNeedsNoCsvQuoting(tmp_path, logger: logging.Logger) -> None:
 
     from excelToCsv.writer import writeCsvFiles
 
-    row = stationRow(**{RELEVANCE_50HERTZ: 1, RELEVANCE_TENNET: 1})
+    row = stationRow(**{RELEVANCE_50HERTZ: "I", RELEVANCE_TENNET: "R"})
     result = convertRows([row], logger)
     writeCsvFiles(result.stations, result.networkElements, tmp_path, logger)
 

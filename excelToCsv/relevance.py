@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from excelToCsv.issues import IssueCollector
+from excelToCsv.errors import NormalizationError
 from excelToCsv.normalize import NOT_RELEVANT_LITERALS, collapseWhitespace, isRelevant
 from excelToCsv.reader import columnValues
 from excelToCsv.schema import KNOWN_INPUT_COLUMNS
@@ -141,8 +142,8 @@ def buildRelevantFor(
     Several organisations are written as ``50Hertz;TennetD``, a single one as a
     plain name, and none as an empty field.
 
-    The relevance columns are free-text tick boxes: anything except an explicit
-    zero counts as relevant, see :func:`~excelToCsv.normalize.isRelevant`.
+    I and R select the organisation equally; zero and blank cells do not.
+    Unknown markers are reported with their source row and column.
     """
     rowCount = len(frame)
     if rowCount == 0:
@@ -156,7 +157,18 @@ def buildRelevantFor(
         seen: set[str] = set()
         for position, value in enumerate(values):
             seen.add(repr(value))
-            flags[position, columnIndex] = isRelevant(value)
+            try:
+                flags[position, columnIndex] = isRelevant(value)
+            except NormalizationError as error:
+                collector.error(
+                    error.problem,
+                    row=int(rowNumbers[position]),
+                    elementId=elementIds[position],
+                    elementType=elementTypes[position],
+                    field=relevance.column,
+                    value=value,
+                    expected=error.expected,
+                )
 
         meaningful = {value for value in seen if value not in _BLANK_REPRESENTATIONS}
         if not flags[:, columnIndex].any() and meaningful:

@@ -73,7 +73,7 @@ for kind in ('warning', 'critical', 'information'):
 from mjap_plugin.plugin_main import MJAPPlugin
 
 rows = [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380', 'Latitude': '53.55', 'Longitude': '9.99'}),
-        elementRow(), elementRow(**{'ELEMENT ID': 'TRA_1', 'ELEMENT-TYPE': 'TRA'})]
+        elementRow(), elementRow(**{'ELEMENT ID': 'TIE_1', 'ELEMENT-TYPE': 'TIE'})]
 if scenario == 'multipod':
     rows = multipodRows()
 if scenario == 'partial':
@@ -84,9 +84,9 @@ if scenario == 'closed-lifetimes':
     for row in rows: row['ENDLIFETIME'] = '2035-12-31'
 workbook = writeExcel(rows, root / 'network.xlsx')
 outagesPath = projectsPath = None
-if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer', 'multipod', 'partial'):
+if scenario in ('populated', 'closed-lifetimes', 'line-and-tie', 'multipod', 'partial'):
     outagesPath, projectsPath = root / 'outages.csv', root / 'projects.csv'
-    pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TRA_1',
+    pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TIE_1',
                    'interne ID': 'FS_1', 'von': '01.06.2028', 'bis': '02.06.2028',
                    'Projekt': 'Demo', 'Maßnahme': 'IBN', 'Schaltungsart': 'gleichzeitig',
                    'Schaltung': 'Täglich'}]).to_csv(outagesPath, index=False)
@@ -99,7 +99,7 @@ if scenario in ('populated', 'closed-lifetimes', 'line-and-transformer', 'multip
         projects = pd.read_csv(projectsPath)
         projects['betroffener Standort'] = 'Amprion_StationA_380,Amprion_StationB_380,Amprion_StationC_380'
         projects.to_csv(projectsPath, index=False)
-    if scenario == 'line-and-transformer':
+    if scenario == 'line-and-tie':
         outages = pd.read_csv(outagesPath)
         lineOutage = outages.iloc[0].copy()
         lineOutage['MJAP-ID'] = lineOutage['interne ID'] = 'FS_2'
@@ -121,8 +121,8 @@ with warnings.catch_warnings(record=True) as captured:
 report = {'scenario': scenario, 'excluded_rows': conversion.excludedRows, 'qgis': Qgis.QGIS_VERSION, 'pandas': pd.__version__,
           'messages': messages, 'warnings': [str(w.message) for w in captured],
           'layers': {}, 'expression_errors': []}
-switches = 2 if scenario == 'line-and-transformer' else 1
-expected = {'Standorte': 2, 'Stromkreise': 2, 'Standorte Schaltungen': 1,
+switches = 2 if scenario == 'line-and-tie' else 1
+expected = {'Standorte': 2, 'Stromkreise': 2, 'Standorte Schaltungen': 0,
             'Stromkreise Schaltungen': switches,
             'Standorte Projekte': 1, 'Stromkreise Projekte': switches}
 if scenario == 'multipod':
@@ -162,7 +162,7 @@ if scenario == 'multipod':
     assert attributes['SK_Attribute']['MJAP-ID'].value_counts().to_dict() == {
         'Amprion_LINE_001': 3, 'Amprion_LINE_002': 1, 'Amprion_LINE_003': 1}
 else:
-    assert attributes['SK_Attribute']['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TRA_1']
+    assert attributes['SK_Attribute']['MJAP-ID'].tolist() == ['Amprion_LINE_471', 'Amprion_TIE_1']
 assert len(attributes['Schaltungen']) == switches
 if scenario == 'multipod':
     elements = pd.read_csv(source / 'Netzelemente.csv')

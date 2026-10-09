@@ -389,22 +389,21 @@ def testOneBrokenDateInAListIsFatal() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Relevance markers: everything except zero counts
+# Relevance markers: I and R select the same organisation
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.parametrize(
     "value",
-    [1, "1", 1.0, "R", "l", "x", "X", "ja", "yes", "true", "True", True, "maybe", "2", "-1"],
+    ["I", "R", "i", "r", " I ", "\tr\n"],
 )
-def testIsRelevantAcceptsAnyMarker(value: object) -> None:
-    """The column is a free-text tick box, not a boolean field."""
+def testIsRelevantAcceptsInterestingAndRelevant(value: object) -> None:
     assert isRelevant(value) is True
 
 
 @pytest.mark.parametrize(
     "value",
-    [0, "0", 0.0, "0.0", " 0 ", "false", "False", "FALSE", "nein", "no", False],
+    [0, "0", 0.0, "0.0", " 0 "],
 )
 def testIsRelevantRejectsExplicitZero(value: object) -> None:
     assert isRelevant(value) is False
@@ -414,3 +413,9 @@ def testIsRelevantRejectsExplicitZero(value: object) -> None:
 def testIsRelevantTreatsBlankAsNotRelevant(value: object) -> None:
     """An empty cell is no marker at all."""
     assert isRelevant(value) is False
+
+
+@pytest.mark.parametrize("value", [1, "1", 2, "x", "l", "true", "false", True, False, "unknown"])
+def testIsRelevantRejectsUnknownMarkers(value):
+    with pytest.raises(NormalizationError, match="Unknown relevance marker"):
+        isRelevant(value)

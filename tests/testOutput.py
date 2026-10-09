@@ -53,7 +53,7 @@ def sampleRows() -> list[dict[str, object]]:
                 "Latitude": "53.551086",
                 "Longitude": "9.993682",
                 "UCTE CODE": "DHAMBRG1",
-                "Interesting/Relevant for (50Hertz)": 1,
+                "Interesting/Relevant for (50Hertz)": "I",
             }
         ),
         elementRow(),

@@ -452,33 +452,30 @@ def normalizeSingleDate(value: object) -> str:
 _TRUE_LITERALS: Final[frozenset[str]] = frozenset({"1", "true"})
 _FALSE_LITERALS: Final[frozenset[str]] = frozenset({"0", "false"})
 
-#: Markers that mean "not relevant" in a relevance column.
-#:
-#: The relevance columns are free-text in practice: they hold ``1``, ``"1"``,
-#: ``R``, ``l`` or anything else a maintainer used to tick the box. Only an
-#: explicit zero - or an explicit false, which unambiguously means the same -
-#: counts as not relevant.
-NOT_RELEVANT_LITERALS: Final[frozenset[str]] = frozenset({"0", "0.0", "false", "nein", "no"})
+#: Interesting and relevant have the same meaning in the output.
+RELEVANT_LITERALS: Final[frozenset[str]] = frozenset({"i", "r"})
+NOT_RELEVANT_LITERALS: Final[frozenset[str]] = frozenset({"0", "0.0"})
 
 
 def isRelevant(value: object) -> bool:
     """Decide whether a relevance marker counts as relevant.
 
-    Everything except an explicit zero counts as relevant, because the column is
-    a free-text tick box rather than a boolean field. Empty cells are not a
-    marker at all and therefore not relevant.
-
-    ``0``, ``"0"``, ``0.0`` and the unambiguous words ``false`` / ``nein`` /
-    ``no`` mean not relevant; ``1``, ``"1"``, ``R``, ``l``, ``x`` and any other
-    non-empty text mean relevant.
+    I (interesting) and R (relevant) both include the organisation. Zero and
+    blank cells do not. Unknown markers are defects, not implicit selections.
+    Matching is case-insensitive and trims surrounding whitespace.
     """
     if isBlank(value):
         return False
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return float(value) != 0.0
-    return str(value).strip(_WHITESPACE).lower() not in NOT_RELEVANT_LITERALS
+    marker = normalizeText(value).lower()
+    if marker in RELEVANT_LITERALS:
+        return True
+    if marker in NOT_RELEVANT_LITERALS:
+        return False
+    raise NormalizationError(
+        "Unknown relevance marker.",
+        "I (interesting) or R (relevant); both select the organisation. "
+        "0 or an empty cell means not relevant.",
+    )
 
 
 def parseBoolean(value: object) -> bool | None:

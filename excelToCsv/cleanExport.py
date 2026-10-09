@@ -12,6 +12,7 @@ from excelToCsv.issues import Issue, ReportedIssue, SEVERITY_ERROR, sortIssues
 from excelToCsv.inputSelection import selectConversionRows
 from excelToCsv.normalize import normalizeElementType
 from excelToCsv.reader import InputTable, textColumn
+from excelToCsv.schema import STATION_TYPE
 
 if TYPE_CHECKING:
     from excelToCsv.pipeline import ConversionResult
@@ -114,7 +115,8 @@ def convertCleanTable(table: InputTable, logger, *, mjap: bool) -> ConversionRes
     table = selectConversionRows(table, logger)
     types = [normalizeElementType(value) for value in textColumn(table.frame, 'ELEMENT-TYPE')]
     ids = textColumn(table.frame, 'ELEMENT ID')
-    pods = textColumn(table.frame, 'Multipod')
+    pods = [identifier if kind != STATION_TYPE else ''
+            for kind, identifier in zip(types, textColumn(table.frame, 'Multipod'))]
     references = [textColumn(table.frame, col) for col in ('Station 1', 'Station 2')]
     numbers = [int(value) for value in table.rowNumbers]
     contexts = {row: {'row': row, 'elementId': ids[p], 'elementType': types[p]}
@@ -122,6 +124,7 @@ def convertCleanTable(table: InputTable, logger, *, mjap: bool) -> ConversionRes
     blocked: set[int] = set()
     findings: list[ReportedIssue] = []
     seen = set()
+    virtualStationIds: set[str] = set()
 
     def remember(entries, *, log=False):
         for severity, issue in entries:
@@ -140,7 +143,10 @@ def convertCleanTable(table: InputTable, logger, *, mjap: bool) -> ConversionRes
         subset = InputTable(frame=table.frame.loc[keep].reset_index(drop=True),
                             rowNumbers=table.rowNumbers[keep], sheetName=table.sheetName,
                             headerRowNumber=table.headerRowNumber)
-        result = convertTable(subset, logger, strict=False)
+        result = convertTable(subset, logger, strict=False,
+                              knownVirtualStationIds=virtualStationIds)
+        # Excluding a circuit does not turn its surviving node into a real UW.
+        virtualStationIds.update(result.virtualStationIds)
         extra = validateMjapRecords(result) if mjap else []
         entries = result.issues + extra
         remember(result.issues)

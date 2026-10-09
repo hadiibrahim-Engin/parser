@@ -6,7 +6,6 @@ then everything is checked, and only afterwards may anything be written.
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
 from excelToCsv.context import ConversionContext, RowSet
@@ -19,26 +18,7 @@ from excelToCsv.schema import (
     COL_STATION_1,
     COL_STATION_2,
     STATION_TYPE,
-    VALID_ELEMENT_TYPES,
 )
-
-
-def validateElementTypes(
-    elementTypes: np.ndarray,
-    rows: RowSet,
-    collector: IssueCollector,
-) -> None:
-    """Report every unknown ``ELEMENT-TYPE`` as a fatal error."""
-    expected = ", ".join(sorted(VALID_ELEMENT_TYPES))
-    for position, elementType in enumerate(elementTypes):
-        if elementType not in VALID_ELEMENT_TYPES:
-            collector.error(
-                "Unknown ELEMENT-TYPE.",
-                field=COL_ELEMENT_TYPE,
-                value=elementType or None,
-                expected=f"One of: {expected}.",
-                **rows.context(position),
-            )
 
 
 def buildStationIndex(rows: RowSet, collector: IssueCollector) -> dict[str, int]:

@@ -2,7 +2,7 @@
 
 The fixed order:
 
-    read Excel -> normalize -> collect stations -> collect network elements
+    read Excel -> select types -> detect Multipods -> collect stations/elements
     -> ALL validations -> only then write both CSV files.
 
 ``convertTable`` is free of I/O and therefore directly testable;
@@ -70,12 +70,15 @@ class ConversionResult:
     sourceElementIds: dict[int, str] = dataclassField(default_factory=dict)
     excludedRows: list[int] = dataclassField(default_factory=list)
     excludedCompanionCount: int = 0
+    virtualStationIds: set[str] = dataclassField(default_factory=set)
 
 
 def convertTable(
     table: InputTable,
     logger: logging.Logger,
     strict: bool = False,
+    *,
+    knownVirtualStationIds: set[str] | None = None,
 ) -> ConversionResult:
     """Transform a loaded input table into both target record sets.
 
@@ -87,6 +90,8 @@ def convertTable(
 
     Only LINE, TIE, SUB, BUB and DCL enter conversion. Other types are ignored
     before normalization, validation or dependency processing.
+    ``knownVirtualStationIds`` preserves topology-derived node identities when
+    revalidating a subset whose associated circuit has already been excluded.
     """
     table = selectConversionRows(table, logger)
     collector = IssueCollector(logger=logger, strict=strict)
@@ -114,8 +119,9 @@ def convertTable(
 
     stationIndex = buildStationIndex(stationRows, collector)
     multipods = detectMultipodGroups(elementRows, context, set(stationIndex))
+    virtualStationIds = (knownVirtualStationIds or set()) | {group.nodeId for group in multipods}
     stations = convertStations(stationRows, context,
-                               virtualStationIds={group.nodeId for group in multipods})
+                               virtualStationIds=virtualStationIds)
     stationMjapByElementId = dict(
         zip(stationRows.elementIds, stations["MJAP-ID"].to_numpy(dtype=object), strict=True)
     )
@@ -155,6 +161,7 @@ def convertTable(
         networkSourceRows=[int(row) for row in elementRows.rowNumbers],
         sourceElementIds={int(row): elementId for row, elementId in
                           zip(table.rowNumbers, textColumn(table.frame, COL_ELEMENT_ID))},
+        virtualStationIds=virtualStationIds,
     )
 
 

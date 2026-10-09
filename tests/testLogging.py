@@ -108,7 +108,7 @@ def testWarningsReportTheDomainModule(logger: logging.Logger, logCapture: Record
     convertRows(
         [
             stationRow(),
-            elementRow(**{"ELEMENT-TYPE": "GEN", "Station 2": "", "Station 1": "Berlin_380"}),
+            elementRow(**{"ELEMENT-TYPE": "BUB", "Station 2": "", "Station 1": "Berlin_380"}),
         ],
         logger,
     )
@@ -236,7 +236,7 @@ def testDetailBlocksGoToTheFindingsLogger(
     convertRows(
         [
             stationRow(),
-            elementRow(**{"ELEMENT-TYPE": "GEN", "Station 1": "Berlin_380", "Station 2": ""}),
+            elementRow(**{"ELEMENT-TYPE": "BUB", "Station 1": "Berlin_380", "Station 2": ""}),
         ],
         logger,
     )

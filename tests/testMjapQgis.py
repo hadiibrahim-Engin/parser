@@ -53,13 +53,13 @@ def testGeneratedBundleRunsThroughRealMjap(application, tmp_path, logger, withOu
     rows = [stationRow(), stationRow(**{'ELEMENT ID': 'Hamburg_380', 'Latitude': '53.55', 'Longitude': '9.99'}),
             stationRow(**{'ELEMENT ID': 'XDemo_380', 'Latitude': '52.9', 'Longitude': '11.7'}),
             elementRow(**{'Station 1': 'XDemo_380'}),
-            elementRow(**{'ELEMENT ID': 'TRA_1', 'ELEMENT-TYPE': 'TRA'})]
+            elementRow(**{'ELEMENT ID': 'TIE_1', 'ELEMENT-TYPE': 'TIE'})]
     workbook = writeExcel(rows, tmp_path / 'network.xlsx')
     outagesPath = projectsPath = None
     if withOutages:
         outagesPath = tmp_path / 'outages.csv'
         projectsPath = tmp_path / 'projects.csv'
-        pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TRA_1',
+        pd.DataFrame([{'MJAP-ID': 'FS_1', 'Netzelement:MJAP-ID': 'Amprion_TIE_1',
                        'interne ID': 'FS_1', 'von': '01.06.2028', 'bis': '02.06.2028',
                        'Projekt': 'Demo'}]).to_csv(outagesPath, index=False)
         pd.DataFrame([{'Projektname': 'Demo', 'betroffener Standort': 'Amprion_Berlin_380',
@@ -80,7 +80,7 @@ def testGeneratedBundleRunsThroughRealMjap(application, tmp_path, logger, withOu
     assert attributes['SK_Attribute']['ABN'].isna().all()
     assert len(attributes['Schaltungen']) == int(withOutages)
     if withOutages:
-        assert attributes['Schaltungen'].iloc[0]['Standort_von'] == 'Amprion_Berlin_380'
+        assert pd.isna(attributes['Schaltungen'].iloc[0]['Standort_von'])
     assert all(frame.empty for frame in pd.read_excel(output / 'missing_data.xlsx', sheet_name=None).values())
 
 

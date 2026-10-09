@@ -56,7 +56,6 @@ def testLineWithTwoValidStations(logger: logging.Logger) -> None:
     ("elementType", "missingColumn"),
     [
         ("LINE", "Station 2"),  # case 12
-        ("TRA", "Station 1"),  # case 13
         ("TIE", "Station 2"),  # case 14
         ("DCL", "Station 1"),  # case 15
     ],
@@ -83,9 +82,9 @@ def testMissingMandatoryStationRemovesTheElement(
 def testOptionalStationReferenceBecomesNaN(
     logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
-    """Case 16: GEN without Station 2 -> literal NaN plus a warning."""
+    """Case 16: BUB without Station 2 -> literal NaN plus a warning."""
     row = elementRow(
-        **{"ELEMENT ID": "GEN_42", "ELEMENT-TYPE": "GEN", "Station 2": ""}
+        **{"ELEMENT ID": "BUB_42", "ELEMENT-TYPE": "BUB", "Station 2": ""}
     )
     result = convertRows([*twoStations(), row], logger)
 
@@ -96,12 +95,12 @@ def testOptionalStationReferenceBecomesNaN(
 
     warnings = logCapture.text(logging.WARNING)
     assert "Station reference is missing." in warnings
-    assert "ELEMENT ID: GEN_42" in warnings
+    assert "ELEMENT ID: BUB_42" in warnings
     assert "Action: Writing NaN and continuing." in warnings
     assert result.warningCount == 1
 
 
-@pytest.mark.parametrize("elementType", ["CAP", "BUB", "GEN", "IND", "LOAD", "PPL", "PROD"])
+@pytest.mark.parametrize("elementType", ["BUB"])
 def testOptionalTypesWithoutAnyStationAreRemoved(
     elementType: str, logger: logging.Logger, logCapture: RecordingHandler
 ) -> None:
@@ -113,7 +112,7 @@ def testOptionalTypesWithoutAnyStationAreRemoved(
     assert "Network element has no usable station reference." in logCapture.text(logging.WARNING)
 
 
-@pytest.mark.parametrize("elementType", ["CAP", "BUB", "GEN", "IND", "LOAD", "PPL", "PROD"])
+@pytest.mark.parametrize("elementType", ["BUB"])
 def testOptionalTypesKeepOneSidedElements(
     elementType: str, logger: logging.Logger
 ) -> None:
@@ -140,19 +139,12 @@ def testUnknownStationReferenceIsFatal(
     assert "Value: HRA_380" in errors
 
 
-def testUnknownElementTypeIsFatal(
-    logger: logging.Logger, logCapture: RecordingHandler
-) -> None:
-    """Case 18: unknown ELEMENT-TYPE."""
+def testUnknownElementTypeIsIgnored(logger, logCapture):
     row = elementRow(**{"ELEMENT ID": "ABC", "ELEMENT-TYPE": "XYZ"})
-    with pytest.raises(ConversionError):
-        convertRows([*twoStations(), row], logger)
-
-    errors = logCapture.text(logging.ERROR)
-    assert "Unknown ELEMENT-TYPE." in errors
-    assert "ELEMENT ID: ABC" in errors
-    assert "ELEMENT-TYPE: XYZ" in errors
-    assert "Row: 4" in errors
+    result = convertRows([*twoStations(), row], logger)
+    assert result.networkElements.empty
+    assert result.errorCount == result.warningCount == 0
+    assert "Ignoring 1 input row(s)" in logCapture.text(logging.INFO)
 
 
 def testNetworkElementMjapIdDoesNotDependOnUcteCode(logger: logging.Logger) -> None:

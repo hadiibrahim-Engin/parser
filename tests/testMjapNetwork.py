@@ -30,7 +30,7 @@ def testDefaultCommandWritesOnlySafeNetworkCsvs(tmp_path, source):
     else:
         assert elements['Station T-1:MJAP-ID'].isna().all()
         assert elements['Y-Knoten-1: MJAP-ID'].isna().all()
-        assert elements['Element Typ'].tolist() == ['Stromkreis', 'Trafo']
+        assert elements['Element Typ'].tolist() == ['Stromkreis', 'Kuppelleitung']
 
 
 def testLegacyModeIsExplicitAndRetainsOldPlaceholders(tmp_path):
