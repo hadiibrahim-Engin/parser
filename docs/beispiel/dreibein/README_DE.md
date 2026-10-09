@@ -56,7 +56,7 @@ Im Parser-Repository:
 Im benachbarten MJAP-Repository:
 
 ```bash
-../parser-debug/.venv/bin/python ../parser-debug/converter.py docs/beispiel/dreibein/DUMMY_Dreibein.xlsx --mjap \
+../parser/.venv/bin/python ../parser/converter.py docs/beispiel/dreibein/DUMMY_Dreibein.xlsx --mjap \
   --freischaltungen docs/beispiel/dreibein/QUELLE_Freischaltungen.csv \
   --projekte docs/beispiel/dreibein/QUELLE_Projekte.csv \
   -o demo/dreibein-demo/mjap

@@ -31,7 +31,7 @@ Aus dem Parser-Repository, in dem dieses Handbuch ebenfalls liegt:
 Im MJAP-Repository lautet derselbe Aufruf, wenn beide Projekte benachbart liegen:
 
 ```bash
-../parser-debug/.venv/bin/python ../parser-debug/converter.py docs/beispiel/DUMMY_Netz.xlsx --mjap \
+../parser/.venv/bin/python ../parser/converter.py docs/beispiel/DUMMY_Netz.xlsx --mjap \
   --freischaltungen docs/beispiel/QUELLE_Freischaltungen.csv \
   --projekte docs/beispiel/QUELLE_Projekte.csv \
   -o demo/handbuch-demo/mjap

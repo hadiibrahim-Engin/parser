@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "excel-to-csv-converter"
+name = "parser"
 version = "1.0.0"
 description = "Converts an Excel network inventory into Stationen.csv and Netzelemente.csv"
 requires-python = ">=3.11"

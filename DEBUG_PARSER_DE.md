@@ -1,7 +1,7 @@
 # Parser mit Konstanten in VS Code debuggen
 
-Projektordner: `/Users/hadi/Desktop/nahriva_works/parser-debug`.
-Privates Repository: https://github.com/hadiibrahim-Engin/parser-debug.
+Projektordner: `/Users/hadi/Desktop/nahriva_works/parser`.
+Privates Repository: https://github.com/hadiibrahim-Engin/parser.
 Die Arbeitsänderungen liegen auf `main`. Die vorhandene Parser-Historie wurde
 übernommen; ein Migrationstag erhält die frühere, nicht in main enthaltene
 experimentelle GUI-Branch. Die Konvertierung verwendet weiterhin dieselbe

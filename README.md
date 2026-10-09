@@ -1,7 +1,7 @@
-# Excel → `Stationen.csv` + `Netzelemente.csv`
+# parser
 
-Das aktive private Repository heißt **parser-debug** und liegt unter
-`/Users/hadi/Desktop/nahriva_works/parser-debug`.
+Das aktive private Repository heißt **parser** und liegt unter
+`/Users/hadi/Desktop/nahriva_works/parser`.
 [Direkter VS-Code-Debugstart mit Konstanten](DEBUG_PARSER_DE.md): `debug_parser.py`.
 Die bisherige Parser-Historie ist erhalten; alle neuen Arbeitsänderungen liegen auf `main`.
 
