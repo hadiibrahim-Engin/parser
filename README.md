@@ -1,5 +1,10 @@
 # Excel → `Stationen.csv` + `Netzelemente.csv`
 
+Das aktive private Repository heißt **parser-debug** und liegt unter
+`/Users/hadi/Desktop/nahriva_works/parser-debug`.
+[Direkter VS-Code-Debugstart mit Konstanten](DEBUG_PARSER_DE.md): `debug_parser.py`.
+Die bisherige Parser-Historie ist erhalten; alle neuen Arbeitsänderungen liegen auf `main`.
+
 The complete German [data handbook](docs/DATENFLUSS_UND_TABELLEN_DE.md) covers
 Excel input, every CSV field, logical types, required/optional values, four diagrams
 and the MJAP/QGIS outputs. Also included: a [standalone HTML copy](docs/DATENFLUSS_UND_TABELLEN_DE.html),

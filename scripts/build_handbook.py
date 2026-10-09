@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / 'docs'
-PARSER = ROOT.parent / 'parser'
+PARSER = ROOT if (ROOT / 'excelToCsv/schema.py').exists() else ROOT.parent / 'parser-debug'
 
 
 def source_constants(path):
