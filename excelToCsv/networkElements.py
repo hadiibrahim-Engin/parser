@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from excelToCsv.context import ConversionContext, RowSet, emptyColumn
+from excelToCsv.multipod import MultipodGroup
 from excelToCsv.normalize import buildMjapId, normalizeDate, normalizeVoltage
 from excelToCsv.reader import applyNormalizer, columnValues, textColumn
 from excelToCsv.relevance import buildRelevantFor
@@ -14,7 +15,6 @@ from excelToCsv.schema import (
     COL_ELEMENT_ID,
     COL_ENDLIFETIME,
     COL_LONG_NAME,
-    COL_MULTIPOD,
     COL_STARTLIFETIME,
     COL_STATION_1,
     COL_STATION_2,
@@ -148,6 +148,8 @@ def convertNetworkElements(
     rows: RowSet,
     context: ConversionContext,
     stationMjapByElementId: dict[str, str],
+    *,
+    multipods: list[MultipodGroup],
 ) -> pd.DataFrame:
     """Build the network element records.
 
@@ -241,7 +243,7 @@ def convertNetworkElements(
         "Y-Knoten-2: MJAP-ID": emptyColumn(rowCount),
     }
     output = pd.DataFrame(data, columns=list(NETWORK_ELEMENT_COLUMNS), dtype=object)
-    applyMultipodTopology(rows, output, context, stationMjapByElementId)
+    applyMultipodTopology(rows, output, context, stationMjapByElementId, multipods)
     return output
 
 
@@ -250,6 +252,7 @@ def applyMultipodTopology(
     output: pd.DataFrame,
     context: ConversionContext,
     stationMjapByElementId: dict[str, str],
+    multipods: list[MultipodGroup],
 ) -> None:
     """Three Excel legs become one complete Y record and two pair records.
 
@@ -258,44 +261,12 @@ def applyMultipodTopology(
     The other records connect A-C (without B) and B-C (without A), respectively.
     A virtual node is therefore referenced in exactly one output record.
     """
-    groups: dict[str, list[int]] = {}
-    for position, node in enumerate(textColumn(rows.frame, COL_MULTIPOD)):
-        if node:
-            groups.setdefault(node, []).append(position)
-    starts = textColumn(rows.frame, COL_STATION_1)
-    ends = textColumn(rows.frame, COL_STATION_2)
-
-    for node, positions in groups.items():
-        # The dedicated reference validator reports a missing SUB node.
-        if node not in stationMjapByElementId:
+    positionByRow = {int(row): position for position, row in enumerate(rows.rowNumbers)}
+    for group in multipods:
+        if not all(row in positionByRow for row in group.sourceRows):
             continue
-        outer: list[str] = []
-        valid = len(positions) == 3
-        for position in positions:
-            start, end = starts[position], ends[position]
-            if ((start == node) == (end == node)
-                    or rows.elementTypes[position] not in {"LINE", "TIE", "DCL"}):
-                valid = False
-            outer.append(end if start == node else start)
-        valid = valid and len(set(outer)) == 3
-        valid = valid and all(station in stationMjapByElementId for station in outer)
-        valid = valid and len({output.at[p, "Spannung"] for p in positions}) == 1
-        valid = valid and len({rows.elementTypes[p] for p in positions}) == 1
-        if not valid:
-            context.collector.error(
-                "Multipod must describe exactly three unambiguous line legs.",
-                field=COL_MULTIPOD,
-                value=node,
-                expected=(
-                    "Exactly three LINE/TIE/DCL rows of the same type and voltage "
-                    "must share this Multipod. Each must connect the referenced SUB "
-                    "node to one of three distinct existing outer SUB stations. "
-                    "Four-leg and multiple-circuit groups are not inferred."
-                ),
-                **rows.context(positions[0]),
-            )
-            continue
-
+        positions = [positionByRow[row] for row in group.sourceRows]
+        node, outer = group.nodeId, group.outerStationIds
         first, second, third = positions
         a, b, c = (stationMjapByElementId[station] for station in outer)
         for position, start, end in ((first, a, b), (second, a, c), (third, b, c)):
@@ -312,6 +283,6 @@ def applyMultipodTopology(
                 name = output.at[position, column]
                 output.at[position, column] = f"{name} (ohne Bein {excluded})".lstrip()
         context.logger.info(
-            "Multipod %s: first Excel line %s is the complete Y; %s and %s are pair connections.",
-            node, rows.elementIds[first], rows.elementIds[second], rows.elementIds[third],
+            "Multipod %s (node %s): first Excel line %s is the complete Y; %s and %s are pair connections.",
+            group.identifier, node, rows.elementIds[first], rows.elementIds[second], rows.elementIds[third],
         )

@@ -43,7 +43,7 @@ REQUIRED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     COL_ENDLIFETIME,
 )
 
-#: Reference to the virtual station shared by the legs of a multipod line.
+#: Shared circuit/group identifier of the three legs of a multipod line.
 COL_MULTIPOD: Final = "Multipod"
 
 #: Columns that carry business logic but may legitimately be absent.
@@ -82,6 +82,14 @@ STATIONS_OPTIONAL: Final[frozenset[str]] = frozenset(
 VALID_ELEMENT_TYPES: Final[frozenset[str]] = (
     frozenset({STATION_TYPE}) | BOTH_STATIONS_REQUIRED | STATIONS_OPTIONAL
 )
+
+#: Initial input selection. Other types are intentionally ignored, not defects.
+CONVERSION_ELEMENT_TYPES: Final[frozenset[str]] = frozenset(
+    {"LINE", "TIE", "SUB", "BUB", "DCL"}
+)
+
+#: Types that can form a three-legged circuit.
+MULTIPOD_ELEMENT_TYPES: Final[frozenset[str]] = frozenset({"LINE", "TIE", "DCL"})
 
 #: Literal written for a missing but tolerated station reference.
 MISSING_STATION_LITERAL: Final = "NaN"

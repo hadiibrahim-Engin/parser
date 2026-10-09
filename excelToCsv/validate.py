@@ -12,11 +12,10 @@ import pandas as pd
 from excelToCsv.context import ConversionContext, RowSet
 from excelToCsv.errors import ConversionError
 from excelToCsv.issues import IssueCollector
-from excelToCsv.normalize import isBlank, isVirtualStation
+from excelToCsv.normalize import isBlank
 from excelToCsv.reader import textColumn
 from excelToCsv.schema import (
     COL_ELEMENT_TYPE,
-    COL_MULTIPOD,
     COL_STATION_1,
     COL_STATION_2,
     STATION_TYPE,
@@ -130,50 +129,6 @@ def validateStationReferences(
                     f"A row with {COL_ELEMENT_TYPE} = {STATION_TYPE} and "
                     f"ELEMENT ID = {reference} must exist."
                 ),
-                **rows.context(position),
-            )
-
-
-def validateMultipodReferences(
-    rows: RowSet,
-    stationIndex: dict[str, int],
-    collector: IssueCollector,
-) -> None:
-    """Check the virtual station referenced by a populated ``Multipod`` value.
-
-    The value names the ``ELEMENT ID`` of the ``SUB`` row at which the legs of a
-    three-legged line meet. Two separate checks:
-
-    * The referenced ``SUB`` row must exist - otherwise fatal, because the Y node
-      columns would carry a dangling reference.
-    * Its id should follow the virtual-station convention ``X<name>_<voltage>``.
-      A station that exists but breaks the convention only yields a ``WARNING``:
-      the reference itself is intact, and the converter must not rename anything.
-    """
-    for position, reference in enumerate(textColumn(rows.frame, COL_MULTIPOD)):
-        if not reference:
-            continue
-        if reference not in stationIndex:
-            collector.error(
-                "Multipod references an unknown virtual station.",
-                field=COL_MULTIPOD,
-                value=reference,
-                expected=(
-                    f"Every {COL_MULTIPOD} value must reference an existing "
-                    f"{STATION_TYPE} ELEMENT ID."
-                ),
-                **rows.context(position),
-            )
-            continue
-        if not isVirtualStation(reference):
-            collector.warning(
-                f"{COL_MULTIPOD} references a valid {STATION_TYPE} station, but its "
-                f"ELEMENT ID does not follow the expected virtual-station X naming "
-                f"convention.",
-                field=COL_MULTIPOD,
-                value=reference,
-                expected="Pattern X<StationName>_<VoltageLevel>, e.g. XStationK_380.",
-                action="Keeping the reference unchanged and continuing.",
                 **rows.context(position),
             )
 

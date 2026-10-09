@@ -173,7 +173,12 @@ def _normalizeDateColumn(
     return values
 
 
-def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
+def convertStations(
+    rows: RowSet,
+    context: ConversionContext,
+    *,
+    virtualStationIds: set[str],
+) -> pd.DataFrame:
     """Build the station records from all ``SUB`` rows.
 
     Validates the mandatory fields (ELEMENT ID, coordinates, date formats) and
@@ -234,19 +239,21 @@ def convertStations(rows: RowSet, context: ConversionContext) -> pd.DataFrame:
             realStation[position] = REAL_STATION_TRUE
             continue
 
-        virtual = isVirtualStation(elementId)
+        # Topology identifies Multipod nodes regardless of their spelling.
+        # Preserve the historical X hint for standalone stations only.
+        virtual = elementId in virtualStationIds or isVirtualStation(elementId)
         realStation[position] = REAL_STATION_FALSE if virtual else REAL_STATION_TRUE
         if virtual:
             name, _ = splitStationId(elementId)
             context.logger.debug(
-                "Row %d: station %s is a virtual X node (name %r) - reales UW = %s.",
+                "Row %d: station %s is a virtual node (name %r) - reales UW = %s.",
                 rows.rowNumbers[position],
                 elementId,
                 name,
                 REAL_STATION_FALSE,
             )
 
-        if not followsStationIdConvention(elementId, voltageLevels[position]):
+        if not virtual and not followsStationIdConvention(elementId, voltageLevels[position]):
             stationNames[position] = buildFallbackStationName(
                 longNames[position], elementId
             )

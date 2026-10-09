@@ -20,6 +20,8 @@ import pandas as pd
 
 from excelToCsv.context import ConversionContext, RowSet, subsetRows
 from excelToCsv.issues import IssueCollector, ReportedIssue
+from excelToCsv.inputSelection import selectConversionRows
+from excelToCsv.multipod import detectMultipodGroups
 from excelToCsv.networkElements import convertNetworkElements, findElementsWithoutStations
 from excelToCsv.normalize import normalizeElementType
 from excelToCsv.reader import (
@@ -39,14 +41,11 @@ from excelToCsv.schema import (
     STATION_COLUMNS,
     STATION_TYPE,
     STATIONS_FILENAME,
-    VALID_ELEMENT_TYPES,
 )
 from excelToCsv.stations import convertStations
 from excelToCsv.validate import (
     buildStationIndex,
     validateDuplicateNetworkElements,
-    validateElementTypes,
-    validateMultipodReferences,
     validateOutputSchema,
     validateStationReferences,
 )
@@ -86,10 +85,10 @@ def convertTable(
     raises a :class:`~excelToCsv.errors.ConversionError` before anything is
     written.
 
-    Rows whose ``ELEMENT-TYPE`` is unknown are the one exception: they cannot be
-    routed to either file, so in lenient mode they are dropped and reported
-    instead of being written with a bogus type.
+    Only LINE, TIE, SUB, BUB and DCL enter conversion. Other types are ignored
+    before normalization, validation or dependency processing.
     """
+    table = selectConversionRows(table, logger)
     collector = IssueCollector(logger=logger, strict=strict)
     context = ConversionContext(
         relevanceColumns=extractRelevanceColumns(list(table.frame.columns), logger),
@@ -109,29 +108,14 @@ def convertTable(
         elementTypes=elementTypes,
     )
 
-    validateElementTypes(elementTypes, allRows, collector)
-    collector.abortIfFailed("element type classification")
-
-    classifiable = np.fromiter(
-        (elementType in VALID_ELEMENT_TYPES for elementType in elementTypes),
-        dtype=bool,
-        count=len(elementTypes),
-    )
-    if not classifiable.all():
-        logger.warning(
-            "Skipping %d row(s) with an unknown ELEMENT-TYPE - they cannot be routed "
-            "to either output file. See the errors above for the affected rows.",
-            int((~classifiable).sum()),
-        )
-        allRows = subsetRows(allRows, classifiable)
-        elementTypes = elementTypes[classifiable]
-
     stationMask = elementTypes == STATION_TYPE
     stationRows = subsetRows(allRows, stationMask)
     elementRows = subsetRows(allRows, ~stationMask)
 
-    stations = convertStations(stationRows, context)
     stationIndex = buildStationIndex(stationRows, collector)
+    multipods = detectMultipodGroups(elementRows, context, set(stationIndex))
+    stations = convertStations(stationRows, context,
+                               virtualStationIds={group.nodeId for group in multipods})
     stationMjapByElementId = dict(
         zip(stationRows.elementIds, stations["MJAP-ID"].to_numpy(dtype=object), strict=True)
     )
@@ -148,9 +132,9 @@ def convertTable(
         )
         elementRows = subsetRows(elementRows, usable)
 
-    networkElements = convertNetworkElements(elementRows, context, stationMjapByElementId)
+    networkElements = convertNetworkElements(elementRows, context, stationMjapByElementId,
+                                             multipods=multipods)
     validateStationReferences(elementRows, stationIndex, collector)
-    validateMultipodReferences(elementRows, stationIndex, collector)
     validateDuplicateNetworkElements(elementRows, networkElements, collector)
 
     collector.abortIfFailed("validation")
@@ -279,6 +263,7 @@ def _runConversion(
                                     writeMjapBundle, writeMjapNetwork)
         targetFormat = mjapTargetFormat(targetFormat)
     table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
+    table = selectConversionRows(table, logger)
     if audit is not None:
         audit['table'] = table
     if excludeFindings:

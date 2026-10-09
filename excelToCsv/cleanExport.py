@@ -9,6 +9,7 @@ import pandas as pd
 
 from excelToCsv.errors import ConversionError
 from excelToCsv.issues import Issue, ReportedIssue, SEVERITY_ERROR, sortIssues
+from excelToCsv.inputSelection import selectConversionRows
 from excelToCsv.normalize import normalizeElementType
 from excelToCsv.reader import InputTable, textColumn
 
@@ -110,10 +111,11 @@ def convertCleanTable(table: InputTable, logger, *, mjap: bool) -> ConversionRes
     of surviving station rows. Every iteration either removes rows or finishes.
     """
     from excelToCsv.pipeline import convertTable
+    table = selectConversionRows(table, logger)
     types = [normalizeElementType(value) for value in textColumn(table.frame, 'ELEMENT-TYPE')]
     ids = textColumn(table.frame, 'ELEMENT ID')
     pods = textColumn(table.frame, 'Multipod')
-    references = [textColumn(table.frame, col) for col in ('Station 1', 'Station 2', 'Multipod')]
+    references = [textColumn(table.frame, col) for col in ('Station 1', 'Station 2')]
     numbers = [int(value) for value in table.rowNumbers]
     contexts = {row: {'row': row, 'elementId': ids[p], 'elementType': types[p]}
                 for p, row in enumerate(numbers)}
@@ -157,7 +159,7 @@ def convertCleanTable(table: InputTable, logger, *, mjap: bool) -> ConversionRes
         blocked.update(newlyBlocked)
 
         # A duplicate identity and a Multipod are indivisible logical elements.
-        # Then remove all lines referring to excluded stations, including X.
+        # Then remove all lines referring to excluded stations, including nodes.
         while True:
             badIdentities = {(types[p], ids[p]) for p, row in enumerate(numbers) if row in blocked and ids[p]}
             badPods = {pods[p] for p, row in enumerate(numbers) if row in blocked and pods[p]}
@@ -172,7 +174,7 @@ def convertCleanTable(table: InputTable, logger, *, mjap: bool) -> ConversionRes
                 elif pods[p] and pods[p] in badPods:
                     field, value, reason = 'Multipod', pods[p], 'Ein Bein des Dreibeins wurde ausgeschlossen; die gesamte Gruppe wird ausgeschlossen.'
                 elif types[p] != 'SUB':
-                    missing = [(col, refs[p]) for col, refs in zip(('Station 1', 'Station 2', 'Multipod'), references)
+                    missing = [(col, refs[p]) for col, refs in zip(('Station 1', 'Station 2'), references)
                                if refs[p] and refs[p] in badStations]
                     if missing:
                         field = ', '.join(col for col, _ in missing)
