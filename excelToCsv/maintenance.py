@@ -72,6 +72,11 @@ def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, publ
         summary.append(f'<p>{result.excludedCompanionCount} ausgeschlossene Begleitdatensätze.</p>')
     if published:
         summary.append(f'<p>Geschrieben: {len(result.stations)} Stationen und {len(result.networkElements)} Netzelemente.</p>')
+        if result.networkElements.empty:
+            summary.append('<p><strong>Keine verbundenen Netzelemente im Export vorhanden.</strong> '
+                           'Netzelemente.csv enthält nur die Spaltenüberschriften. '
+                           'Typfilter und die folgenden Befunde prüfen. '
+                           'Der vollständige MJAP-Assistent benötigt ein verbundenes Netz.</p>')
     else:
         summary.append('<p>Eventuell vorhandene ältere CSV-Dateien sind kein Ergebnis dieses Laufs. Vor einem QGIS-Import den Exportstatus prüfen.</p>')
     summary.append('<p>Pflege erfolgt in der ursprünglichen Excel-Datei. Fehler und Warnungen korrigieren, '

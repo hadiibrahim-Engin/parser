@@ -54,9 +54,19 @@ def mjapTargetFormat(target: TargetFormat) -> TargetFormat:
     return TargetFormat(elementTypes=types)
 
 
-def prepareMjapFrames(stations: pd.DataFrame, elements: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Preserve real dates, and keep unused topology cells truly missing on read."""
-    if stations.empty or elements.empty:
+def prepareMjapFrames(
+    stations: pd.DataFrame,
+    elements: pd.DataFrame,
+    *,
+    allowEmptyNetwork: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Validate retained records and preserve MJAP's CSV value conventions.
+
+    Standalone network tables may contain only headers after row exclusion.
+    The full wizard bundle still requires a connected network. Empty tables
+    do not bypass validation of any records remaining in the other table.
+    """
+    if not allowEmptyNetwork and (stations.empty or elements.empty):
         raise ConversionError('MJAP needs at least one station and one connected network element.')
     stations, elements = stations.copy(), elements.copy()
     ids = set(stations['MJAP-ID'])

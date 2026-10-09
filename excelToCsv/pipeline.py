@@ -287,7 +287,8 @@ def _runConversion(
         if not excludeFindings and any(issue.problem == 'Network element has no usable station reference.' for _, issue in result.issues):
             from excelToCsv.errors import ConversionError
             raise ConversionError('MJAP export cannot discard network elements with missing station references.', issues=result.issues)
-        result.stations, result.networkElements = prepareMjapFrames(result.stations, result.networkElements)
+        result.stations, result.networkElements = prepareMjapFrames(
+            result.stations, result.networkElements, allowEmptyNetwork=mjapNetwork)
         if mjap:
             if excludeFindings:
                 from excelToCsv.cleanExport import prepareCleanCompanions
@@ -316,6 +317,15 @@ def _runConversion(
             targetFormat.applyToNetworkElements(result.networkElements),
             outputDir, logger, quoteAll=quoteAll,
         )
+        if result.networkElements.empty:
+            logger.warning(
+                'Keine verbundenen Netzelemente im Export vorhanden. '
+                'Netzelemente.csv wurde mit Spaltenüberschriften geschrieben; '
+                'Stationen.csv enthält %d Station(en). '
+                'Typfilter und Befunde im Pflegebericht prüfen. '
+                'Der vollständige MJAP-Assistent benötigt ein verbundenes Netz.',
+                len(result.stations),
+            )
         logger.info(
             'MJAP network export: two CSVs generated from Excel. The complete wizard '
             'also needs nonempty Freischaltungen.csv and Projekte.csv; these were not generated.'
