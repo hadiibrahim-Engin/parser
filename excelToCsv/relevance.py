@@ -113,7 +113,7 @@ def relevantFor(row: InputRow, columns: list[RelevanceColumn], collector: IssueC
     """The organisations a row is relevant for, as ``a;b;c`` (empty if none).
 
     I and R select the organisation equally; zero and blank cells do not.
-    Unknown markers are reported with their source row and column.
+    An unknown marker counts as not relevant and is reported with its source cell.
     """
     labels: list[str] = []
     for relevance in columns:
@@ -122,6 +122,7 @@ def relevantFor(row: InputRow, columns: list[RelevanceColumn], collector: IssueC
             if isRelevant(value) and relevance.label not in labels:
                 labels.append(relevance.label)
         except NormalizationError as error:
-            collector.error(error.problem, field=relevance.column, value=value,
-                            expected=error.expected, **row.context())
+            collector.warning(error.problem, field=relevance.column, value=value,
+                              expected=error.expected, action="Treated as not relevant.",
+                              **row.context())
     return joinRelevance(labels)

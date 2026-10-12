@@ -1,4 +1,4 @@
-"""``Stationen.csv``: real stations from SUB rows, virtual stations from tripods."""
+"""``Stationen.csv``: one real station per usable SUB row."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import json
 from collections import Counter
 
 from excelToCsv.context import ConversionContext
-from excelToCsv.errors import NormalizationError
-from excelToCsv.issues import IssueCollector
-from excelToCsv.multipod import Tripod
+from excelToCsv.errors import ConversionError, NormalizationError
+from excelToCsv.mjap import validateShapeId
 from excelToCsv.normalize import (
     LATITUDE_RANGE,
     LONGITUDE_RANGE,
@@ -27,7 +26,6 @@ from excelToCsv.schema import (
     COL_TSO,
     COL_UCTE_CODE,
     COL_VOLTAGE_LEVEL,
-    REAL_STATION_FALSE,
     REAL_STATION_TRUE,
 )
 
@@ -35,107 +33,69 @@ from excelToCsv.schema import (
 Station = dict[str, str]
 
 
-def convertStations(rows: list[InputRow], tripods: list[Tripod],
-                    context: ConversionContext) -> dict[str, Station]:
-    """All stations keyed by ELEMENT ID: every SUB row, then every tripod node.
+def convertStations(rows: list[InputRow], context: ConversionContext) -> dict[str, Station]:
+    """Stations keyed by ELEMENT ID; Station 1 / Station 2 are resolved against these keys only.
 
-    Station 1 / Station 2 references are resolved against these keys only.
-
-    SUB rows are the real stations (``reales UW = Wahr``). The node of a tripod
-    is virtual (``reales UW = Falsch``); without a SUB row of its own it is
-    placed at the centre of the tripod's three outer stations.
+    A SUB row that cannot become a usable station is skipped with a warning:
+    no ELEMENT ID, a repeated ELEMENT ID, no TSO, an unreadable coordinate or
+    an ID that MJAP cannot store.
     """
-    stations = _realStations(rows, context)
-    for tripod in tripods:
-        if tripod.node in stations:
-            stations[tripod.node]["reales UW"] = REAL_STATION_FALSE
-            continue
-        latitude, longitude = _centre([stations.get(station) for station in tripod.outerStations])
-        nameRow = tripod.nameRow
-        stations[tripod.node] = stationRecord(
-            nameRow.text(COL_TSO), tripod.node, tripod.node, latitude, longitude,
-            nameRow.cells.get(COL_VOLTAGE_LEVEL), real=False, ucte="", relevantFor="",
-            comment="", planningDates=context.planningDates,
-        )
-    context.logger.info("Found %d real and %d virtual station(s).", len(rows),
-                        sum(record["reales UW"] == REAL_STATION_FALSE for record in stations.values()))
-    return stations
-
-
-def stationRecord(owner: str, elementId: str, name: str, latitude: str, longitude: str,
-                  voltage: object, *, real: bool, ucte: str, relevantFor: str, comment: str,
-                  planningDates: tuple[str, str]) -> Station:
-    start, end = planningDates
-    return {
-        "Eigentümer": owner,
-        "MJAP-ID": buildMjapId(owner, elementId),
-        "Stationsname - Langname": name,
-        "lat": latitude,
-        "long": longitude,
-        "Spannung": json.dumps(splitVoltages(voltage), ensure_ascii=False, separators=(",", ":")),
-        "IBN": start,
-        "ABN": end,
-        "Stationsname - Kurzname": name,
-        "reales UW": REAL_STATION_TRUE if real else REAL_STATION_FALSE,
-        "Stationsname - OPC-Name": "",
-        "ID-GUID intern-1": "",
-        "ID-GUID intern-2": "",
-        "ID-OPC": "",
-        "ID-UCTE": ucte,
-        "relevant für": relevantFor,
-        "ID": ucte,
-        "Kommentar": comment,
-        "IBN - Mehrfach": "",
-        "ABN - Mehrfach": "",
-    }
-
-
-def _realStations(rows: list[InputRow], context: ConversionContext) -> dict[str, Station]:
-    collector = context.collector
     latitudes = normalizeCoordinates(rows, COL_LATITUDE, LATITUDE_RANGE, context)
     longitudes = normalizeCoordinates(rows, COL_LONGITUDE, LONGITUDE_RANGE, context)
     stations: dict[str, Station] = {}
     firstRow: dict[str, int] = {}
     for row, latitude, longitude in zip(rows, latitudes, longitudes):
-        elementId, owner = row.elementId, row.text(COL_TSO)
-        if not elementId:
-            collector.error("Station is missing its ELEMENT ID.", field=COL_ELEMENT_ID,
-                            expected="Every SUB row requires a non-empty ELEMENT ID.",
-                            **row.context())
+        if not latitude or not longitude:
+            continue  # already reported by normalizeCoordinates
+        reason = _skipReason(row, firstRow)
+        if reason is not None:
+            problem, field, value = reason
+            context.collector.skip(problem, field=field, value=value, **row.context())
             continue
-        if elementId in stations:
-            collector.error(f"Duplicate station ELEMENT ID (first used in row {firstRow[elementId]}).",
-                            field=COL_ELEMENT_ID, value=elementId,
-                            expected="Every SUB station requires a unique ELEMENT ID.",
-                            **row.context())
-            continue
-        if not owner:
-            collector.error("Station is missing the owner required for its MJAP-ID.",
-                            field=COL_TSO, expected="A TSO value for <owner>_<ELEMENT ID>.",
-                            **row.context())
+        elementId = row.elementId
         firstRow[elementId] = row.number
-        stations[elementId] = stationRecord(
-            owner, elementId, row.text(COL_LONG_NAME), latitude, longitude,
-            row.cells.get(COL_VOLTAGE_LEVEL), real=True, ucte=row.text(COL_UCTE_CODE),
-            relevantFor=context.relevantFor(row), comment=row.text(COL_DESCRIPTION),
-            planningDates=context.planningDates,
-        )
+        stations[elementId] = {
+            "Eigentümer": row.text(COL_TSO),
+            "MJAP-ID": buildMjapId(row.text(COL_TSO), elementId),
+            "Stationsname - Langname": row.text(COL_LONG_NAME),
+            "lat": latitude,
+            "long": longitude,
+            "Spannung": json.dumps(splitVoltages(row.cells.get(COL_VOLTAGE_LEVEL)),
+                                   ensure_ascii=False, separators=(",", ":")),
+            "IBN": context.planningDates[0],
+            "ABN": context.planningDates[1],
+            "Stationsname - Kurzname": row.text(COL_LONG_NAME),
+            "reales UW": REAL_STATION_TRUE,
+            "Stationsname - OPC-Name": "",
+            "ID-GUID intern-1": "",
+            "ID-GUID intern-2": "",
+            "ID-OPC": "",
+            "ID-UCTE": row.text(COL_UCTE_CODE),
+            "relevant für": context.relevantFor(row),
+            "ID": row.text(COL_UCTE_CODE),
+            "Kommentar": row.text(COL_DESCRIPTION),
+            "IBN - Mehrfach": "",
+            "ABN - Mehrfach": "",
+        }
+    context.logger.info("Found %d station(s) in %d SUB row(s).", len(stations), len(rows))
     return stations
 
 
-def _centre(corners: list[Station | None]) -> tuple[str, str]:
-    """Mean lat/long of the outer stations; empty if any of them is unusable."""
+def _skipReason(row: InputRow, firstRow: dict[str, int]) -> tuple[str, str, object] | None:
+    """Why a SUB row cannot become a station, as (problem, field, value); ``None`` if it can."""
+    elementId, owner = row.elementId, row.text(COL_TSO)
+    if not elementId:
+        return "Station has no ELEMENT ID.", COL_ELEMENT_ID, None
+    if elementId in firstRow:
+        return (f"Duplicate station ELEMENT ID (first used in row {firstRow[elementId]}).",
+                COL_ELEMENT_ID, elementId)
+    if not owner:
+        return "Station has no TSO, needed for its MJAP-ID <TSO>_<ELEMENT ID>.", COL_TSO, None
     try:
-        points = [(float(corner["lat"]), float(corner["long"])) for corner in corners if corner]
-    except ValueError:
-        return "", ""
-    if len(points) != len(corners):
-        return "", ""
-    return tuple(_formatCoordinate(sum(axis) / len(points)) for axis in zip(*points))
-
-
-def _formatCoordinate(value: float) -> str:
-    return f"{value:.6f}".rstrip("0").rstrip(".")
+        validateShapeId(buildMjapId(owner, elementId))
+    except ConversionError as error:
+        return str(error), COL_ELEMENT_ID, elementId
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -167,10 +127,10 @@ def normalizeCoordinates(rows: list[InputRow], column: str, limits: tuple[float,
     decimal places the column uses. The second pass retries the failures with
     that precision to reinsert a separator that was forgotten in the sheet.
     Without any value carrying a separator, the position is guessed (as far
-    right as the range allows). Every repair is a warning; whatever still fails
-    is an error.
+    right as the range allows). Every repair is a warning; a row whose value
+    still fails is skipped.
     """
-    collector: IssueCollector = context.collector
+    collector = context.collector
     raw = [row.cells.get(column) for row in rows]
     values = [""] * len(raw)
     precisionCounts: Counter[int] = Counter()
@@ -211,6 +171,6 @@ def normalizeCoordinates(rows: list[InputRow], column: str, limits: tuple[float,
                           action=f"Writing the corrected value {values[position]} and continuing.",
                           **rows[position].context())
     for position, error in sorted(failures.items()):
-        collector.error(error.problem, field=column, value=raw[position],
-                        expected=error.expected, **rows[position].context())
+        collector.skip(error.problem, field=column, value=raw[position],
+                       expected=error.expected, **rows[position].context())
     return values

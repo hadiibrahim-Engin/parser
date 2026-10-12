@@ -1,10 +1,11 @@
 """Excel -> ``Stationen.csv`` + ``Netzelemente.csv``.
 
-    read Excel -> keep SUB/LINE/TIE/DCL/BUB rows -> stations (real + virtual)
-    -> network elements (lines + tripods) -> MJAP checks -> write CSVs
+    read Excel -> keep SUB/LINE/TIE/DCL/BUB rows -> stations -> network elements
+    -> MJAP value conventions -> write CSVs
 
-Any error stops the run before a CSV is written. ``Fehlerliste.csv`` and
-``Pflegebericht.html`` are written for every run, so a failed run says what to fix.
+A row that cannot be converted is skipped with a warning; the CSVs are always
+written. Only an unusable input file stops the run. ``Fehlerliste.csv`` and
+``Pflegebericht.html`` list every skipped row and every warning.
 """
 
 from __future__ import annotations
@@ -24,7 +25,6 @@ from excelToCsv.elements import convertElements
 from excelToCsv.errors import ConversionError
 from excelToCsv.issues import EMPTY_DISPLAY, SEVERITY_ERROR, Issue, IssueCollector, ReportedIssue
 from excelToCsv.mjap import prepareMjapFrames
-from excelToCsv.multipod import findTripods
 from excelToCsv.reader import DEFAULT_ENGINE, InputRow, InputTable, buildInputTable
 from excelToCsv.relevance import extractRelevanceColumns
 from excelToCsv.report import writeReports
@@ -80,9 +80,8 @@ def convertTable(table: InputTable, logger: logging.Logger) -> ConversionResult:
     stationRows = [row for row in rows if row.elementType == STATION_TYPE]
     lineRows = [row for row in rows if row.elementType != STATION_TYPE]
 
-    tripods, tripodRows = findTripods(lineRows, context.collector)
-    stations = convertStations(stationRows, tripods, context)
-    elements = convertElements(lineRows, tripods, tripodRows, stations, context)
+    stations = convertStations(stationRows, context)
+    elements = convertElements(lineRows, stations, context)
 
     context.collector.logSummary()
     return ConversionResult(
@@ -111,9 +110,6 @@ def runConversion(
         table = buildInputTable(inputPath, sheet, logger, engine=engine, headerRow=headerRow)
         result = convertTable(table, logger)
         issues = result.issues
-        if result.errorCount:
-            raise ConversionError(f"{result.errorCount} error(s) in the input - no CSV written.",
-                                  issues=issues)
         result.stations, result.networkElements = prepareMjapFrames(result.stations,
                                                                     result.networkElements)
         outputDir = Path(outputDir)

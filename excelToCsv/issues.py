@@ -21,6 +21,9 @@ EMPTY_DISPLAY = "<empty>"
 SEVERITY_ERROR: Final = "ERROR"
 SEVERITY_WARNING: Final = "WARNING"
 
+#: Action of every finding whose row is left out of the output.
+ROW_SKIPPED: Final = "Zeile übersprungen - sie fehlt in der Ausgabe. In der Excel korrigieren und erneut exportieren."
+
 #: Sort rank per severity: errors before warnings.
 _SEVERITY_ORDER: Final = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1}
 
@@ -199,6 +202,12 @@ class IssueCollector:
         issue = Issue(problem=problem, **context)  # type: ignore[arg-type]
         self.warnings.append(issue)
         self.detailLogger.warning(issue.render("Tolerable issue."), stacklevel=2)
+
+    def skip(self, problem: str, **context: object) -> None:
+        """Record a row that is left out of the output; the run carries on."""
+        issue = Issue(problem=problem, action=ROW_SKIPPED, **context)  # type: ignore[arg-type]
+        self.warnings.append(issue)
+        self.detailLogger.warning(issue.render("Row skipped."), stacklevel=2)
 
     @property
     def detailLogger(self) -> logging.Logger:
