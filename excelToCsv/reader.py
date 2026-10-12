@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,14 @@ import numpy as np
 import pandas as pd
 
 from excelToCsv.errors import ConversionError, NormalizationError
-from excelToCsv.normalize import collapseWhitespace, isBlank, normalizeText
-from excelToCsv.schema import KNOWN_INPUT_COLUMNS, REQUIRED_INPUT_COLUMNS
+from excelToCsv.normalize import collapseWhitespace, isBlank, normalizeElementType, normalizeText
+from excelToCsv.schema import (
+    COL_ELEMENT_TYPE,
+    COL_ENDLIFETIME,
+    COL_STARTLIFETIME,
+    KNOWN_INPUT_COLUMNS,
+    REQUIRED_INPUT_COLUMNS,
+)
 
 #: Distance between the header row and the first data row (counted 1-based).
 HEADER_ROW_OFFSET = 2
@@ -61,6 +68,11 @@ class InputTable:
 
     def __len__(self) -> int:
         return len(self.frame)
+
+    def subset(self, mask: np.ndarray) -> InputTable:
+        """Keep only the rows selected by ``mask``, with their Excel row numbers."""
+        return replace(self, frame=self.frame.loc[mask].reset_index(drop=True),
+                       rowNumbers=self.rowNumbers[mask])
 
 
 def loadExcel(
@@ -290,7 +302,7 @@ def normalizeColumns(frame: pd.DataFrame, logger: logging.Logger) -> pd.DataFram
             logger.debug("Column %r normalized to %r.", str(original), canonical)
         renamed.append(canonical)
 
-    duplicates = sorted({name for name in renamed if renamed.count(name) > 1})
+    duplicates = sorted(name for name, count in Counter(renamed).items() if count > 1)
     if duplicates:
         logger.error("Duplicate input columns after normalization: %s", ", ".join(duplicates))
         raise ConversionError(f"Duplicate input columns: {', '.join(duplicates)}")
@@ -300,19 +312,22 @@ def normalizeColumns(frame: pd.DataFrame, logger: logging.Logger) -> pd.DataFram
     return normalized
 
 
-def validateRequiredInputColumns(frame: pd.DataFrame, logger: logging.Logger) -> None:
+def validateRequiredInputColumns(frame: pd.DataFrame, logger: logging.Logger,
+                                 *, requireLifecycleDates: bool = True) -> None:
     """Ensure that every mandatory input column is present.
 
     Raises:
         ConversionError: As soon as at least one required column is missing.
     """
     present = set(frame.columns)
-    missing = [name for name in REQUIRED_INPUT_COLUMNS if name not in present]
+    required = [name for name in REQUIRED_INPUT_COLUMNS
+                if requireLifecycleDates or name not in {COL_STARTLIFETIME, COL_ENDLIFETIME}]
+    missing = [name for name in required if name not in present]
     if missing:
         for name in missing:
             logger.error("Missing required input column: %s", name)
         raise ConversionError(f"Missing required input column(s): {', '.join(missing)}")
-    logger.debug("All %d required input columns are present.", len(REQUIRED_INPUT_COLUMNS))
+    logger.debug("All %d required input columns are present.", len(required))
 
 
 def dropEmptyRows(
@@ -326,8 +341,12 @@ def dropEmptyRows(
 
     blank = np.ones(len(frame), dtype=bool)
     for column in frame.columns:
-        values = frame[column].to_numpy(dtype=object)
-        blank &= np.fromiter((isBlank(value) for value in values), dtype=bool, count=len(values))
+        candidates = np.flatnonzero(blank)  # only rows still empty so far
+        if not candidates.size:
+            break
+        values = frame[column].to_numpy(dtype=object)[candidates]
+        blank[candidates] = np.fromiter((isBlank(value) for value in values), dtype=bool,
+                                        count=len(values))
 
     dropped = int(blank.sum())
     if not dropped:
@@ -344,6 +363,8 @@ def buildInputTable(
     logger: logging.Logger,
     engine: str = DEFAULT_ENGINE,
     headerRow: int | None = None,
+    *,
+    requireLifecycleDates: bool = True,
 ) -> InputTable:
     """The complete read path: Excel -> validated, prepared ``InputTable``.
 
@@ -356,7 +377,7 @@ def buildInputTable(
 
     frame = applyHeaderRow(raw, headerIndex)
     frame = normalizeColumns(frame, logger)
-    validateRequiredInputColumns(frame, logger)
+    validateRequiredInputColumns(frame, logger, requireLifecycleDates=requireLifecycleDates)
     logger.info("Found %d data row(s) below the header.", len(frame))
 
     rowNumbers = np.arange(len(frame), dtype=np.int64) + headerIndex + HEADER_ROW_OFFSET
@@ -381,6 +402,14 @@ def textColumn(frame: pd.DataFrame, column: str) -> np.ndarray:
     values = columnValues(frame, column)
     return np.fromiter(
         (normalizeText(value) for value in values), dtype=object, count=len(values)
+    )
+
+
+def elementTypeColumn(frame: pd.DataFrame) -> np.ndarray:
+    """Return the normalized (uppercase) ELEMENT-TYPE of every row."""
+    values = columnValues(frame, COL_ELEMENT_TYPE)
+    return np.fromiter(
+        (normalizeElementType(value) for value in values), dtype=object, count=len(values)
     )
 
 

@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import pandas as pd
 
-from excelToCsv.context import ConversionContext, RowSet
+from excelToCsv.context import ConversionContext, RowSet, groupPositions
 from excelToCsv.errors import ConversionError
 from excelToCsv.issues import IssueCollector
 from excelToCsv.normalize import isBlank
 from excelToCsv.reader import textColumn
 from excelToCsv.schema import (
+    COL_ELEMENT_ID,
     COL_ELEMENT_TYPE,
     COL_STATION_1,
     COL_STATION_2,
@@ -27,13 +28,8 @@ def buildStationIndex(rows: RowSet, collector: IssueCollector) -> dict[str, int]
     Duplicate station ids are not silently overwritten but reported as a fatal
     error naming every affected row.
     """
-    positionsById: dict[str, list[int]] = {}
-    for position, elementId in enumerate(rows.elementIds):
-        if elementId:
-            positionsById.setdefault(elementId, []).append(position)
-
     index: dict[str, int] = {}
-    for elementId, positions in positionsById.items():
+    for elementId, positions in groupPositions(rows.elementIds).items():
         index[elementId] = int(rows.rowNumbers[positions[0]])
         if len(positions) == 1:
             continue
@@ -41,7 +37,7 @@ def buildStationIndex(rows: RowSet, collector: IssueCollector) -> dict[str, int]
         for position in positions:
             collector.error(
                 f"Duplicate station ELEMENT ID (also used in row(s): {affected}).",
-                field="ELEMENT ID",
+                field=COL_ELEMENT_ID,
                 value=elementId,
                 expected="Every SUB station requires a unique ELEMENT ID.",
                 **rows.context(position),
@@ -59,13 +55,8 @@ def validateDuplicateNetworkElements(
     Fully identical records are tolerable (``WARNING``); conflicting records
     sharing an id are fatal.
     """
-    positionsById: dict[str, list[int]] = {}
-    for position, elementId in enumerate(rows.elementIds):
-        if elementId:
-            positionsById.setdefault(elementId, []).append(position)
-
     values = frame.to_numpy(dtype=object)
-    for elementId, positions in positionsById.items():
+    for elementId, positions in groupPositions(rows.elementIds).items():
         if len(positions) == 1:
             continue
         affected = ", ".join(str(int(rows.rowNumbers[position])) for position in positions)
@@ -74,7 +65,7 @@ def validateDuplicateNetworkElements(
             collector.warning(
                 f"Duplicate network element ELEMENT ID with identical content "
                 f"(row(s): {affected}).",
-                field="ELEMENT ID",
+                field=COL_ELEMENT_ID,
                 value=elementId,
                 action="Keeping all rows and continuing.",
                 **rows.context(positions[0]),
@@ -84,7 +75,7 @@ def validateDuplicateNetworkElements(
             collector.error(
                 f"Conflicting duplicate network element ELEMENT ID "
                 f"(also used in row(s): {affected}).",
-                field="ELEMENT ID",
+                field=COL_ELEMENT_ID,
                 value=elementId,
                 expected="Duplicate ELEMENT IDs must reference identical records.",
                 **rows.context(position),
@@ -107,7 +98,7 @@ def validateStationReferences(
                 value=reference,
                 expected=(
                     f"A row with {COL_ELEMENT_TYPE} = {STATION_TYPE} and "
-                    f"ELEMENT ID = {reference} must exist."
+                    f"{COL_ELEMENT_ID} = {reference} must exist."
                 ),
                 **rows.context(position),
             )

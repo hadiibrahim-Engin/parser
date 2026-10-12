@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -131,7 +132,7 @@ def _rejectDuplicateTargets(
 ) -> None:
     """Refuse a rename that would give two columns the same name."""
     resulting = [renames.get(column, column) for column in columns]
-    duplicates = sorted({name for name in resulting if resulting.count(name) > 1})
+    duplicates = sorted(name for name, count in Counter(resulting).items() if count > 1)
     if duplicates:
         raise ConversionError(
             f"Target format renames produce duplicate column(s) in {filename}: "

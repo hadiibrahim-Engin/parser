@@ -36,9 +36,6 @@ _EXCLUDED_EXACT: Final[frozenset[str]] = frozenset(
 _LABEL_IN_PARENTHESES: Final = re.compile(r"\(([^)]*)\)")
 _LABEL_NOISE: Final = re.compile(r"interesting|relevant|\bfor\b", re.IGNORECASE)
 
-#: Beyond this column count the bitmask optimization is no longer safe.
-_MAX_PACKED_COLUMNS: Final = 62
-
 #: Separator between several organisations in ``relevant für``.
 RELEVANCE_SEPARATOR: Final = ";"
 
@@ -154,9 +151,7 @@ def buildRelevantFor(
     flags = np.zeros((rowCount, len(relevanceColumns)), dtype=bool)
     for columnIndex, relevance in enumerate(relevanceColumns):
         values = columnValues(frame, relevance.column)
-        seen: set[str] = set()
         for position, value in enumerate(values):
-            seen.add(repr(value))
             try:
                 flags[position, columnIndex] = isRelevant(value)
             except NormalizationError as error:
@@ -170,8 +165,10 @@ def buildRelevantFor(
                     expected=error.expected,
                 )
 
-        meaningful = {value for value in seen if value not in _BLANK_REPRESENTATIONS}
-        if not flags[:, columnIndex].any() and meaningful:
+        if flags[:, columnIndex].any():
+            continue
+        meaningful = {repr(value) for value in values} - _BLANK_REPRESENTATIONS
+        if meaningful:
             # Every marker in this column reads as "not relevant". Legitimate, but
             # worth recording in the debug log when a column looks unexpectedly empty.
             collector.logger.debug(
@@ -183,32 +180,8 @@ def buildRelevantFor(
             )
 
     labels = [item.label for item in relevanceColumns]
-    if len(labels) > _MAX_PACKED_COLUMNS:  # pragma: no cover - defensive fallback
-        return np.fromiter(
-            (joinRelevance(_uniqueLabels(labels, row)) for row in flags),
-            dtype=object,
-            count=rowCount,
-        )
-
-    # Each row is reduced to a bitmask so identical patterns share one joined
-    # string. On large files this saves a lot of string building.
-    weights = (np.uint64(1) << np.arange(len(labels), dtype=np.uint64)).astype(np.int64)
-    codes = flags.astype(np.int64) @ weights
-    textByCode = {
-        int(code): joinRelevance(
-            _uniqueLabels(labels, [(int(code) >> bit) & 1 for bit in range(len(labels))])
-        )
-        for code in np.unique(codes)
-    }
-    return np.fromiter((textByCode[int(code)] for code in codes), dtype=object, count=rowCount)
-
-
-def _uniqueLabels(labels: list[str], flags: object) -> list[str]:
-    """Collect the set labels in column order, without duplicates."""
-    selected: list[str] = []
-    seen: set[str] = set()
-    for label, flag in zip(labels, flags):  # type: ignore[arg-type]
-        if flag and label not in seen:
-            seen.add(label)
-            selected.append(label)
-    return selected
+    result = []
+    for rowFlags in flags:
+        selected = [label for label, flag in zip(labels, rowFlags) if flag]
+        result.append(joinRelevance(list(dict.fromkeys(selected))))
+    return np.array(result, dtype=object)

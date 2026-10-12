@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
@@ -23,6 +24,9 @@ EMPTY_DISPLAY = "<empty>"
 
 SEVERITY_ERROR: Final = "ERROR"
 SEVERITY_WARNING: Final = "WARNING"
+
+#: Sort rank per severity: errors before warnings.
+_SEVERITY_ORDER: Final = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1}
 
 #: Column order of the issue report; ``Row`` first so it sorts next to the input.
 REPORT_COLUMNS: Final[tuple[str, ...]] = (
@@ -98,13 +102,12 @@ def sortIssues(issues: list[ReportedIssue]) -> list[ReportedIssue]:
     Errors come before warnings for the same row, and findings without a row
     (schema-level problems) go last because they are not tied to a cell.
     """
-    severityOrder = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1}
     return sorted(
         issues,
         key=lambda entry: (
             entry[1].row is None,
             entry[1].row or 0,
-            severityOrder.get(entry[0], 9),
+            _SEVERITY_ORDER.get(entry[0], 9),
         ),
     )
 
@@ -221,13 +224,8 @@ class IssueCollector:
         The console shows this instead of hundreds of individual blocks, so a
         run stays readable while still naming what actually went wrong.
         """
-        counts: dict[tuple[str, str], int] = {}
-        for severity, issue in self.allIssues():
-            key = (severity, issue.problem)
-            counts[key] = counts.get(key, 0) + 1
-
-        order = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1}
-        ranked = sorted(counts.items(), key=lambda item: (order[item[0][0]], -item[1]))
+        counts = Counter((severity, issue.problem) for severity, issue in self.allIssues())
+        ranked = sorted(counts.items(), key=lambda item: (_SEVERITY_ORDER[item[0][0]], -item[1]))
         return [
             f"{severity:<7} {count:>5}x  {problem}"
             for (severity, problem), count in ranked
@@ -248,11 +246,6 @@ class IssueCollector:
             self.logger.critical(block, stacklevel=2)
         else:
             self.logger.warning(block, stacklevel=2)
-
-    @property
-    def failed(self) -> bool:
-        """``True`` as soon as at least one fatal error has been recorded."""
-        return bool(self.errors)
 
     def allIssues(self) -> list[ReportedIssue]:
         """Every finding with its severity, errors first, then by Excel row."""

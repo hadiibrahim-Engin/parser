@@ -5,20 +5,17 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from excelToCsv.context import ConversionContext, RowSet, emptyColumn
+from excelToCsv.context import ConversionContext, RowSet, emptyColumn, ownerMjapIds
+from excelToCsv.lifecycle import lifecycleColumns
 from excelToCsv.multipod import MultipodGroup
-from excelToCsv.normalize import buildMjapId, normalizeDate, normalizeVoltage
-from excelToCsv.reader import applyNormalizer, columnValues, textColumn
+from excelToCsv.normalize import normalizeVoltage
+from excelToCsv.reader import columnValues, textColumn
 from excelToCsv.relevance import buildRelevantFor
 from excelToCsv.schema import (
     BOTH_STATIONS_REQUIRED,
-    COL_ELEMENT_ID,
-    COL_ENDLIFETIME,
     COL_LONG_NAME,
-    COL_STARTLIFETIME,
     COL_STATION_1,
     COL_STATION_2,
-    COL_TSO,
     COL_UCTE_CODE,
     COL_VOLTAGE_LEVEL,
     MISSING_STATION_LITERAL,
@@ -26,24 +23,8 @@ from excelToCsv.schema import (
 )
 
 
-def _normalizeDateColumn(
-    rows: RowSet,
-    column: str,
-    targetColumn: str,
-    context: ConversionContext,
-) -> np.ndarray:
-    """Normalize a date column to ``DD.MM.YYYY``; defects are fatal."""
-    raw = columnValues(rows.frame, column)
-    values, failures = applyNormalizer(raw, normalizeDate)
-    for position, error in failures:
-        context.collector.error(
-            error.problem,
-            field=column,
-            value=raw[position],
-            expected=f"{error.expected} Target column: {targetColumn} (DD.MM.YYYY).",
-            **rows.context(position),
-        )
-    return values
+#: Problem text of an element dropped for lacking station references.
+NO_STATION_REFERENCE = "Network element has no usable station reference."
 
 
 def findElementsWithoutStations(rows: RowSet, context: ConversionContext) -> np.ndarray:
@@ -81,7 +62,7 @@ def findElementsWithoutStations(rows: RowSet, context: ConversionContext) -> np.
 
         keep[position] = False
         context.collector.warning(
-            "Network element has no usable station reference.",
+            NO_STATION_REFERENCE,
             field=", ".join(missing),
             value=None,
             expected=(
@@ -160,36 +141,14 @@ def convertNetworkElements(
     rowCount = len(rows)
     context.logger.info("Found %d network element(s).", rowCount)
 
-    owners = textColumn(rows.frame, COL_TSO)
-    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
-    mjapIds = np.fromiter(
-        (
-            buildMjapId(owner, elementId)
-            for owner, elementId in zip(owners, rows.elementIds, strict=True)
+    owners, mjapIds = ownerMjapIds(
+        rows, context, "Network element",
+        expectedId="Every network element row requires a non-empty ELEMENT ID.",
+        expectedOwner=(
+            "Every network element requires a non-empty TSO value for <owner>_<ELEMENT ID>."
         ),
-        dtype=object,
-        count=rowCount,
     )
-    for position, elementId in enumerate(rows.elementIds):
-        if not elementId:
-            context.collector.error(
-                "Network element is missing its identifier.",
-                field=COL_ELEMENT_ID,
-                value=None,
-                expected="Every network element row requires a non-empty ELEMENT ID.",
-                **rows.context(position),
-            )
-        if not owners[position]:
-            context.collector.error(
-                "Network element is missing the owner required for its MJAP-ID.",
-                field=COL_TSO,
-                value=None,
-                expected=(
-                    "Every network element requires a non-empty TSO value for "
-                    "<owner>_<ELEMENT ID>."
-                ),
-                **rows.context(position),
-            )
+    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
 
     stationStart = resolveStationReferences(rows, COL_STATION_1, context)
     stationEnd = resolveStationReferences(rows, COL_STATION_2, context)
@@ -203,6 +162,7 @@ def convertNetworkElements(
     )
     longNames = textColumn(rows.frame, COL_LONG_NAME)
 
+    startDates, endDates = lifecycleColumns(rows, context)
     data = {
         "Eigentümer": owners,
         "MJAP-ID": mjapIds,
@@ -218,8 +178,8 @@ def convertNetworkElements(
             rows.elementTypes,
             context.collector,
         ),
-        "IBN": _normalizeDateColumn(rows, COL_STARTLIFETIME, "IBN", context),
-        "ABN": _normalizeDateColumn(rows, COL_ENDLIFETIME, "ABN", context),
+        "IBN": startDates,
+        "ABN": endDates,
         "IBN - Mehrfach": emptyColumn(rowCount),
         "ABN - Mehrfach": emptyColumn(rowCount),
         "Station Anfang": stationStartMjap,

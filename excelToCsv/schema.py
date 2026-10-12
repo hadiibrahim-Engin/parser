@@ -73,16 +73,6 @@ STATION_TYPE: Final = "SUB"
 #: Network element types where BOTH station references are mandatory.
 BOTH_STATIONS_REQUIRED: Final[frozenset[str]] = frozenset({"LINE", "TRA", "TIE", "DCL"})
 
-#: Network element types where a missing station reference is tolerable.
-STATIONS_OPTIONAL: Final[frozenset[str]] = frozenset(
-    {"CAP", "BUB", "GEN", "IND", "LOAD", "PPL", "PROD"}
-)
-
-#: All valid ELEMENT-TYPE values (always uppercase).
-VALID_ELEMENT_TYPES: Final[frozenset[str]] = (
-    frozenset({STATION_TYPE}) | BOTH_STATIONS_REQUIRED | STATIONS_OPTIONAL
-)
-
 #: Initial input selection. Other types are intentionally ignored, not defects.
 CONVERSION_ELEMENT_TYPES: Final[frozenset[str]] = frozenset(
     {"LINE", "TIE", "SUB", "BUB", "DCL"}

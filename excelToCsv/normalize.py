@@ -14,6 +14,7 @@ import datetime as dt
 import math
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Final
 
 from excelToCsv.errors import NormalizationError
@@ -345,16 +346,6 @@ def normalizeCoordinate(
     )
 
 
-def normalizeLatitude(value: object, decimalPlaces: int | None = None) -> CoordinateValue:
-    """Normalize a latitude (-90 .. 90)."""
-    return normalizeCoordinate(value, limits=LATITUDE_RANGE, decimalPlaces=decimalPlaces)
-
-
-def normalizeLongitude(value: object, decimalPlaces: int | None = None) -> CoordinateValue:
-    """Normalize a longitude (-180 .. 180)."""
-    return normalizeCoordinate(value, limits=LONGITUDE_RANGE, decimalPlaces=decimalPlaces)
-
-
 # --------------------------------------------------------------------------- #
 # Dates
 # --------------------------------------------------------------------------- #
@@ -415,9 +406,7 @@ def normalizeSingleDate(value: object) -> str:
     if isBlank(value):
         return ""
 
-    if isinstance(value, dt.datetime):
-        return value.strftime(DATE_OUTPUT_FORMAT)
-    if isinstance(value, dt.date):
+    if isinstance(value, dt.date):  # includes datetime
         return value.strftime(DATE_OUTPUT_FORMAT)
 
     if isinstance(value, bool):
@@ -432,7 +421,12 @@ def normalizeSingleDate(value: object) -> str:
             )
         return (_EXCEL_EPOCH + dt.timedelta(days=serial)).strftime(DATE_OUTPUT_FORMAT)
 
-    text = str(value).strip(_WHITESPACE)
+    return _normalizeDateText(str(value).strip(_WHITESPACE))
+
+
+@lru_cache(maxsize=4096)
+def _normalizeDateText(text: str) -> str:
+    """Parse one date text with the fixed formats; cached since columns repeat dates."""
     for pattern in _DATE_FORMATS:
         try:
             return dt.datetime.strptime(text, pattern).strftime(DATE_OUTPUT_FORMAT)
@@ -446,11 +440,9 @@ def normalizeSingleDate(value: object) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Booleans
+# Relevance markers
 # --------------------------------------------------------------------------- #
 
-_TRUE_LITERALS: Final[frozenset[str]] = frozenset({"1", "true"})
-_FALSE_LITERALS: Final[frozenset[str]] = frozenset({"0", "false"})
 
 #: Interesting and relevant have the same meaning in the output.
 RELEVANT_LITERALS: Final[frozenset[str]] = frozenset({"i", "r"})
@@ -476,34 +468,6 @@ def isRelevant(value: object) -> bool:
         "I (interesting) or R (relevant); both select the organisation. "
         "0 or an empty cell means not relevant.",
     )
-
-
-def parseBoolean(value: object) -> bool | None:
-    """Interpret a boolean-like value.
-
-    Returns:
-        ``True`` / ``False`` for an unambiguous value, otherwise ``None``. In the
-        ``None`` case nothing is guessed - the caller logs a ``WARNING`` and does
-        *not* treat the entry as ``True``.
-    """
-    if isBlank(value):
-        return False
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        number = float(value)
-        if number == 1.0:
-            return True
-        if number == 0.0:
-            return False
-        return None
-
-    text = str(value).strip(_WHITESPACE).lower()
-    if text in _TRUE_LITERALS:
-        return True
-    if text in _FALSE_LITERALS:
-        return False
-    return None
 
 
 # --------------------------------------------------------------------------- #

@@ -30,152 +30,44 @@ EXIT_PARTIAL_EXPORT = 3
 
 
 def buildParser() -> argparse.ArgumentParser:
-    """Build the CLI argument parser."""
-    parser = argparse.ArgumentParser(
-        prog="converter.py",
-        description="Converts Excel into MJAP-compatible Stationen.csv and Netzelemente.csv (default).",
-    )
-    parser.add_argument("input", type=Path, help="Path to the input Excel file (.xlsx).")
-    exportMode = parser.add_mutually_exclusive_group()
-    exportMode.add_argument('--mjap', action='store_true',
-                        help='Write a validated MJAP four-table bundle; exclude elements with findings.')
-    exportMode.add_argument('--legacy', action='store_true',
-                           help='Use the historical CSV format and lenient validation; not safe for MJAP.')
+    """Read export options; the default writes the two MJAP network CSVs."""
+    parser = argparse.ArgumentParser(prog='converter.py',
+        description='Convert Excel into MJAP-compatible Stationen.csv and Netzelemente.csv.')
+    parser.add_argument('input', type=Path, help='Input Excel file (.xlsx).')
+    parser.add_argument('-o', '--output-dir', type=Path, default=Path('.'), dest='outputDir',
+                        help='Output directory (default: current directory).')
+    parser.add_argument('--sheet', help='Worksheet name or 0-based index (default: first sheet).')
+    parser.add_argument('--header-row', type=int, dest='headerRow', metavar='N',
+                        help='1-based header row (default: automatic detection).')
+    parser.add_argument('--engine', default='auto', choices=['auto', 'openpyxl', 'calamine'],
+                        help='Excel reader (auto prefers calamine if installed).')
+
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--mjap', action='store_true', help='Export all four MJAP tables.')
+    mode.add_argument('--legacy', action='store_true', help='Use the historical CSV format.')
     parser.add_argument('--freischaltungen', type=Path, dest='outagesPath',
-                        help='Nonempty switching CSV with real records; required for --mjap.')
+                        help='Switching CSV with real records; required for --mjap.')
     parser.add_argument('--projekte', type=Path, dest='projectsPath',
-                        help='Nonempty project CSV with real records; required for --mjap.')
-    parser.add_argument(
-        "-o",
-        "--output-dir",
-        type=Path,
-        default=Path("."),
-        dest="outputDir",
-        help="Directory for the generated CSV files (default: current directory).",
-    )
-    parser.add_argument(
-        "--sheet",
-        default=None,
-        help="Worksheet name or 0-based index. Default: the first worksheet.",
-    )
-    parser.add_argument(
-        "--encoding",
-        default="utf-8",
-        help="Encoding for --legacy only; MJAP exports always use UTF-8 with BOM.",
-    )
-    parser.add_argument(
-        "--header-row",
-        type=int,
-        default=None,
-        dest="headerRow",
-        metavar="N",
-        help=(
-            "1-based Excel row that holds the column headers. By default the header "
-            "row is detected automatically and everything above it is discarded."
-        ),
-    )
-    parser.add_argument(
-        "--engine",
-        default="auto",
-        choices=["auto", "openpyxl", "calamine"],
-        help=(
-            "Excel reading engine. 'auto' uses the optional, much faster 'calamine' "
-            "package when installed and falls back to 'openpyxl'."
-        ),
-    )
-    parser.add_argument(
-        "--quote-all",
-        action="store_true",
-        dest="quoteAll",
-        help="Quote every CSV field instead of only the ones that require it.",
-    )
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        dest="logLevel",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Minimum log level for the console (default: INFO).",
-    )
-    parser.add_argument(
-        "--target-format",
-        type=Path,
-        default=None,
-        dest="targetFormatPath",
-        metavar="FILE",
-        help=(
-            "JSON file renaming output columns and translating ELEMENT-TYPE values "
-            "(e.g. LINE -> Stromkreis). Affects the target format only; input column "
-            "names stay untouched. See targetFormat.example.json."
-        ),
-    )
-    parser.add_argument(
-        "--empty-placeholder",
-        default=DEFAULT_EMPTY_PLACEHOLDER,
-        dest="emptyPlaceholder",
-        metavar="TEXT",
-        help=(
-            "Filler for --legacy only (default: a single space). "
-            "Without it pandas types such a column as numeric NaN and the .str accessor "
-            "fails downstream. Pass '' to keep those columns truly empty."
-        ),
-    )
-    parser.add_argument(
-        "--details",
-        action="store_true",
-        dest="showDetails",
-        help=(
-            "Print every single finding on the console instead of only the grouped "
-            "summary. The details always reach --issue-file and --debug-file regardless."
-        ),
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help=(
-            "Abort the whole MJAP export on errors or warnings instead of exporting its clean subset. "
-            "Legacy export keeps its historical validation behavior."
-        ),
-    )
-    parser.add_argument(
-        "--issue-file",
-        type=Path,
-        default=None,
-        dest="issueFile",
-        metavar="PATH",
-        help=(
-            "Write every error and warning of the run to this file, sorted by Excel row, "
-            "so they can be worked through. A '.csv' target opens straight in Excel next "
-            "to the input; any other suffix gets the same readable blocks as the console. "
-            "Written even when the conversion aborts."
-        ),
-    )
-    parser.add_argument(
-        "--debug-file",
-        type=Path,
-        default=None,
-        dest="debugFile",
-        metavar="PATH",
-        help=(
-            "Write a full DEBUG-level log to this file, in addition to the console. "
-            "Always contains full detail regardless of --log-level; plain text, no colors."
-        ),
-    )
-    colorGroup = parser.add_mutually_exclusive_group()
-    colorGroup.add_argument(
-        "--color",
-        action="store_const",
-        const=True,
-        dest="color",
-        default=None,
-        help="Force colored log output.",
-    )
-    colorGroup.add_argument(
-        "--no-color",
-        action="store_const",
-        const=False,
-        dest="color",
-        help="Disable colored log output.",
-    )
+                        help='Project CSV with real records; required for --mjap.')
+    parser.add_argument('--strict', action='store_true', help='Abort on errors; retain warnings.')
+    parser.add_argument('--quote-all', action='store_true', dest='quoteAll', help='Quote every CSV field.')
+    parser.add_argument('--target-format', type=Path, dest='targetFormatPath', metavar='FILE',
+                        help='JSON column/type mapping; MJAP requires canonical column names.')
+    parser.add_argument('--encoding', default='utf-8', help='Legacy encoding; MJAP always uses UTF-8 with BOM.')
+    parser.add_argument('--empty-placeholder', default=DEFAULT_EMPTY_PLACEHOLDER, dest='emptyPlaceholder',
+                        metavar='TEXT', help='Legacy filler for empty columns (default: one space).')
+
+    parser.add_argument('--details', action='store_true', dest='showDetails', help='Print every finding.')
+    parser.add_argument('--log-level', default='INFO', dest='logLevel',
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'])
+    parser.add_argument('--issue-file', type=Path, dest='issueFile', metavar='PATH',
+                        help='Additional findings report (.csv or text), including failed runs.')
+    parser.add_argument('--debug-file', type=Path, dest='debugFile', metavar='PATH',
+                        help='Full DEBUG log, independent of console log level.')
+    color = parser.add_mutually_exclusive_group()
+    color.add_argument('--color', action='store_const', const=True, dest='color', default=None,
+                       help='Force colored logs.')
+    color.add_argument('--no-color', action='store_const', const=False, dest='color', help='Disable colored logs.')
     return parser
 
 

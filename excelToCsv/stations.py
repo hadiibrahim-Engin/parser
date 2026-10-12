@@ -7,32 +7,28 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-from excelToCsv.context import ConversionContext, RowSet, emptyColumn
+from excelToCsv.context import ConversionContext, RowSet, emptyColumn, ownerMjapIds
+from excelToCsv.lifecycle import lifecycleColumns
 from excelToCsv.errors import NormalizationError
 from excelToCsv.normalize import (
     LATITUDE_RANGE,
     LONGITUDE_RANGE,
     STATION_ID_SEPARATOR,
-    buildMjapId,
     decimalPlaceCount,
     followsStationIdConvention,
     isVirtualStation,
     normalizeCoordinate,
-    normalizeDate,
     splitStationId,
     splitVoltages,
 )
-from excelToCsv.reader import applyNormalizer, columnValues, textColumn
+from excelToCsv.reader import columnValues, textColumn
 from excelToCsv.relevance import buildRelevantFor, toJsonList
 from excelToCsv.schema import (
     COL_DESCRIPTION,
     COL_ELEMENT_ID,
-    COL_ENDLIFETIME,
     COL_LATITUDE,
     COL_LONG_NAME,
     COL_LONGITUDE,
-    COL_STARTLIFETIME,
-    COL_TSO,
     COL_UCTE_CODE,
     COL_VOLTAGE_LEVEL,
     REAL_STATION_FALSE,
@@ -153,26 +149,6 @@ def _normalizeCoordinateColumn(
     return values
 
 
-def _normalizeDateColumn(
-    rows: RowSet,
-    column: str,
-    targetColumn: str,
-    context: ConversionContext,
-) -> np.ndarray:
-    """Normalize a date column to ``DD.MM.YYYY``; defects are fatal."""
-    raw = columnValues(rows.frame, column)
-    values, failures = applyNormalizer(raw, normalizeDate)
-    for position, error in failures:
-        context.collector.error(
-            error.problem,
-            field=column,
-            value=raw[position],
-            expected=f"{error.expected} Target column: {targetColumn} (DD.MM.YYYY).",
-            **rows.context(position),
-        )
-    return values
-
-
 def convertStations(
     rows: RowSet,
     context: ConversionContext,
@@ -189,38 +165,16 @@ def convertStations(
     context.logger.info("Found %d station(s).", rowCount)
 
     elementIds = rows.elementIds
-    owners = textColumn(rows.frame, COL_TSO)
-    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
-    mjapIds = np.fromiter(
-        (
-            buildMjapId(owner, elementId)
-            for owner, elementId in zip(owners, elementIds, strict=True)
-        ),
-        dtype=object,
-        count=rowCount,
+    owners, mjapIds = ownerMjapIds(
+        rows, context, "Station",
+        expectedId="Every SUB row requires a non-empty ELEMENT ID.",
+        expectedOwner="Every SUB row requires a non-empty TSO value for <owner>_<ELEMENT ID>.",
     )
-    for position, elementId in enumerate(elementIds):
-        if not elementId:
-            context.collector.error(
-                "Station is missing its identifier.",
-                field=COL_ELEMENT_ID,
-                value=None,
-                expected="Every SUB row requires a non-empty ELEMENT ID.",
-                **rows.context(position),
-            )
-        if not owners[position]:
-            context.collector.error(
-                "Station is missing the owner required for its MJAP-ID.",
-                field=COL_TSO,
-                value=None,
-                expected="Every SUB row requires a non-empty TSO value for <owner>_<ELEMENT ID>.",
-                **rows.context(position),
-            )
+    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
 
     latitudes = _normalizeCoordinateColumn(rows, COL_LATITUDE, LATITUDE_RANGE, context)
     longitudes = _normalizeCoordinateColumn(rows, COL_LONGITUDE, LONGITUDE_RANGE, context)
-    startDates = _normalizeDateColumn(rows, COL_STARTLIFETIME, "IBN", context)
-    endDates = _normalizeDateColumn(rows, COL_ENDLIFETIME, "ABN", context)
+    startDates, endDates = lifecycleColumns(rows, context)
 
     voltages = np.fromiter(
         (toJsonList(splitVoltages(value)) for value in columnValues(rows.frame, COL_VOLTAGE_LEVEL)),

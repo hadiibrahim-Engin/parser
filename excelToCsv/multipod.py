@@ -4,11 +4,11 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
-from excelToCsv.context import ConversionContext, RowSet
-from excelToCsv.normalize import normalizeElementType, normalizeVoltage
-from excelToCsv.reader import InputTable, columnValues, textColumn
+from excelToCsv.context import ConversionContext, RowSet, groupPositions
+from excelToCsv.normalize import normalizeVoltage
+from excelToCsv.reader import InputTable, columnValues, elementTypeColumn, textColumn
 from excelToCsv.schema import (
-    COL_ELEMENT_ID, COL_ELEMENT_TYPE, COL_MULTIPOD,
+    COL_ELEMENT_ID, COL_MULTIPOD,
     COL_STATION_1, COL_STATION_2, COL_VOLTAGE_LEVEL,
     MULTIPOD_ELEMENT_TYPES, STATION_TYPE,
 )
@@ -36,8 +36,7 @@ def findMultipodSummaryRows(table: InputTable) -> set[int]:
     pods = textColumn(table.frame, COL_MULTIPOD)
     if not any(pods):
         return set()
-    types = [normalizeElementType(value)
-             for value in columnValues(table.frame, COL_ELEMENT_TYPE)]
+    types = elementTypeColumn(table.frame)
     ids = textColumn(table.frame, COL_ELEMENT_ID)
     legCounts = Counter(
         pod for kind, identifier, pod in zip(types, ids, pods)
@@ -68,10 +67,7 @@ def detectMultipodGroups(
     other three occur once each. Neither the group ID nor a station prefix
     participates in node detection. Report every row of an invalid group.
     """
-    positionsById: dict[str, list[int]] = {}
-    for position, identifier in enumerate(textColumn(rows.frame, COL_MULTIPOD)):
-        if identifier:
-            positionsById.setdefault(identifier, []).append(position)
+    positionsById = groupPositions(textColumn(rows.frame, COL_MULTIPOD))
     if not positionsById:
         return []
 

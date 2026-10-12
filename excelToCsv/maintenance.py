@@ -8,12 +8,12 @@ from datetime import datetime
 from html import escape
 from pathlib import Path
 
-from openpyxl.utils import get_column_letter
-
 from excelToCsv.issues import Issue, formatValue, sortIssues
 
 CSV_COLUMNS = ('Schweregrad', 'Quelldatei', 'Blatt', 'Quellzeile', 'Fundstelle', 'ELEMENT ID',
                'ELEMENT-TYPE', 'Feld', 'Wert', 'Problem', 'Erwartet', 'Pflegehinweis')
+#: The HTML table shows the same fields, with a shorter type heading.
+HTML_COLUMNS = tuple('Typ' if column == 'ELEMENT-TYPE' else column for column in CSV_COLUMNS)
 
 
 def sourceLocation(issue: Issue, sheet: str, columnLetters: dict[str, str]) -> str:
@@ -38,38 +38,62 @@ def sourceLocation(issue: Issue, sheet: str, columnLetters: dict[str, str]) -> s
     return f'{prefix}: ' + ', '.join(f'{quotedSheet}!{cell}' for cell in cells)
 
 
+def columnLetter(position: int) -> str:
+    """Excel column letter for a 1-based column position (1 -> A, 27 -> AA)."""
+    letters = ''
+    while position:
+        position, remainder = divmod(position - 1, 26)
+        letters = chr(ord('A') + remainder) + letters
+    return letters
+
+
+def reportFields(severity: str, issue: Issue, inputFile: str, sheet: str,
+                 columnLetters: dict[str, str]) -> tuple:
+    """One finding as the row shared by Fehlerliste.csv and Pflegebericht.html."""
+    return (severity, issue.source or inputFile, '' if issue.source else sheet,
+            issue.row if issue.row is not None else '',
+            sourceLocation(issue, sheet, columnLetters), issue.elementId,
+            issue.elementType, issue.field,
+            formatValue(issue.value) if issue.field else '', issue.problem,
+            issue.expected, issue.action)
+
+
 def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, published):
     """Reports are separate from MJAP input tables; never modify source Excel."""
     outputDir = Path(outputDir)
     outputDir.mkdir(parents=True, exist_ok=True)
     ordered = sortIssues(issues)
     sheet = table.sheetName if table is not None else ''
-    columnLetters = ({str(column): get_column_letter(position + 1)
+    columnLetters = ({str(column): columnLetter(position + 1)
                       for position, column in enumerate(table.frame.columns)}
                      if table is not None else {})
+    inputFile = str(Path(inputPath).resolve())
+    reportRows = [reportFields(severity, issue, inputFile, sheet, columnLetters)
+                  for severity, issue in ordered]
     csvPath = outputDir / 'Fehlerliste.csv'
     with csvPath.open('w', encoding='utf-8-sig', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(CSV_COLUMNS)
-        for severity, issue in ordered:
-            writer.writerow((severity, issue.source or str(Path(inputPath).resolve()), '' if issue.source else sheet,
-                             issue.row if issue.row is not None else '',
-                             sourceLocation(issue, sheet, columnLetters), issue.elementId,
-                             issue.elementType, issue.field,
-                             formatValue(issue.value) if issue.field else '', issue.problem,
-                             issue.expected, issue.action or 'Excel-Eingabe korrigieren und erneut exportieren.'))
+        for fields in reportRows:
+            # Only the CSV falls back to a generic maintenance hint.
+            writer.writerow((*fields[:-1], fields[-1] or 'Excel-Eingabe korrigieren und erneut exportieren.'))
 
     e = lambda value: escape(str(value), quote=True)
     counts = Counter(severity for severity, _ in ordered)
     excluded = set(result.excludedRows) if result is not None else set()
     status = 'Export veröffentlicht' if published else 'Export abgebrochen – keine neuen MJAP-CSV-Dateien veröffentlicht'
     summary = [f'<p><strong>{e(status)}</strong></p>',
-               f'<p>Eingabe: {e(Path(inputPath).resolve())}<br>Blatt: {e(sheet)}<br>'
+               f'<p>Eingabe: {e(inputFile)}<br>Blatt: {e(sheet)}<br>'
                f'Erzeugt: {e(datetime.now().astimezone().isoformat(timespec="seconds"))}</p>',
                f'<p>{counts["ERROR"]} Fehler; {counts["WARNING"]} Warnungen; '
                f'{len(excluded)} ausgeschlossene Excel-Zeilen.</p>']
     if result is not None and result.excludedCompanionCount:
         summary.append(f'<p>{result.excludedCompanionCount} ausgeschlossene Begleitdatensätze.</p>')
+    if result is not None and result.lifecycleDates is not None:
+        start, end = result.lifecycleDates
+        summary.append(f'<p>Erzeugter Planungszeitraum für alle Stationen und Netzelemente: '
+                       f'IBN = {e(start)}; ABN = {e(end)}. '
+                       'STARTLIFETIME und ENDLIFETIME aus der Eingabe werden nicht übernommen.</p>')
     if published:
         summary.append(f'<p>Geschrieben: {len(result.stations)} Stationen und {len(result.networkElements)} Netzelemente.</p>')
         if result.networkElements.empty:
@@ -83,27 +107,24 @@ def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, publ
                    'abhängige Stationen/Dreibeine gemeinsam prüfen und danach denselben Exportbefehl erneut ausführen. '
                    'Ein Teil-Export ersetzt die CSV-Tabellen vollständig durch den verbleibenden geprüften Bestand; '
                    'ausgeschlossene Elemente fehlen entsprechend in der Karte.</p>')
-    rows = ''.join('<tr>' + ''.join(f'<td>{e(value)}</td>' for value in (
-        severity, issue.source or str(Path(inputPath).resolve()), '' if issue.source else sheet,
-        issue.row if issue.row is not None else '', sourceLocation(issue, sheet, columnLetters),
-        issue.elementId, issue.elementType, issue.field,
-        formatValue(issue.value) if issue.field else '', issue.problem, issue.expected, issue.action,
-    )) + '</tr>' for severity, issue in ordered)
-    headers = ('Schweregrad', 'Quelldatei', 'Blatt', 'Quellzeile', 'Fundstelle',
-               'ELEMENT ID', 'Typ', 'Feld', 'Wert', 'Problem', 'Erwartet', 'Pflegehinweis')
-    tableHtml = '<table><thead><tr>' + ''.join(f'<th>{e(col)}</th>' for col in headers) + '</tr></thead><tbody>' + rows + '</tbody></table>'
+    rows = ''.join('<tr>' + ''.join(f'<td>{e(value)}</td>' for value in fields) + '</tr>'
+                   for fields in reportRows)
+    tableHtml = '<table><thead><tr>' + ''.join(f'<th>{e(col)}</th>' for col in HTML_COLUMNS) + '</tr></thead><tbody>' + rows + '</tbody></table>'
     originals = []
     if table is not None:
         # Include normalized raw input values, not corrected output values.
         # Sheet/row references point to the unchanged original workbook.
         affected = excluded | {issue.row for _, issue in ordered if issue.row is not None and not issue.source}
+        columns = list(table.frame.columns)
+        values = table.frame.to_numpy(dtype=object)
         for position, number in enumerate(table.rowNumbers):
             if int(number) not in affected:
                 continue
+            record = dict(zip(columns, values[position]))
             cells = ''.join(f'<tr><th>{e(column)}</th><td>{e(formatValue(value))}</td></tr>'
-                            for column, value in table.frame.iloc[position].items())
+                            for column, value in record.items())
             originals.append(f'<details><summary>Excel-Zeile {int(number)} – '
-                             f'{e(formatValue(table.frame.iloc[position].get("ELEMENT ID")))}</summary>'
+                             f'{e(formatValue(record.get("ELEMENT ID")))}</summary>'
                              f'<table>{cells}</table></details>')
     html = ('<!doctype html><html lang="de"><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
