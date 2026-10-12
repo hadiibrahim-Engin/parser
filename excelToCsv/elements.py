@@ -127,7 +127,11 @@ def _tripodRecords(tripod: Tripod, stations: dict[str, Station],
 
 def _stationId(row: InputRow, field: str, station: str, stations: dict[str, Station],
                context: ConversionContext, *, realOnly: bool = False) -> str:
-    """MJAP-ID of a referenced station; reports a missing or unknown station."""
+    """MJAP-ID of the station named in Station 1 / Station 2.
+
+    ``stations`` is keyed by the ELEMENT ID of the SUB rows, so a reference is
+    matched against ELEMENT ID only - never against LONG-NAME.
+    """
     record = stations.get(station)
     if record is not None and (not realOnly or record["reales UW"] == REAL_STATION_TRUE):
         return record["MJAP-ID"]

@@ -37,7 +37,9 @@ Station = dict[str, str]
 
 def convertStations(rows: list[InputRow], tripods: list[Tripod],
                     context: ConversionContext) -> dict[str, Station]:
-    """All stations by ELEMENT ID: every SUB row, then every tripod node.
+    """All stations keyed by ELEMENT ID: every SUB row, then every tripod node.
+
+    Station 1 / Station 2 references are resolved against these keys only.
 
     SUB rows are the real stations (``reales UW = Wahr``). The node of a tripod
     is virtual (``reales UW = Falsch``); without a SUB row of its own it is
