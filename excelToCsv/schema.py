@@ -31,27 +31,25 @@ REQUIRED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     COL_TSO,
     COL_ELEMENT_ID,
     COL_LONG_NAME,
-    COL_DESCRIPTION,
     COL_LATITUDE,
     COL_LONGITUDE,
     COL_STATION_1,
     COL_STATION_2,
     COL_VOLTAGE_LEVEL,
     COL_ELEMENT_TYPE,
-    COL_UCTE_CODE,
-    COL_STARTLIFETIME,
-    COL_ENDLIFETIME,
 )
 
 #: Shared circuit/group identifier of the three legs of a multipod line.
 COL_MULTIPOD: Final = "Multipod"
 
-#: Columns that carry business logic but may legitimately be absent.
-OPTIONAL_INPUT_COLUMNS: Final[tuple[str, ...]] = (COL_MULTIPOD,)
+#: Columns that are used when present; their output fields stay empty otherwise.
+OPTIONAL_INPUT_COLUMNS: Final[tuple[str, ...]] = (COL_MULTIPOD, COL_DESCRIPTION, COL_UCTE_CODE)
 
 #: Known columns that carry no business logic here. They may be absent.
 #: ``Map Multipod`` stays irrelevant - only ``Multipod`` itself is evaluated.
 IGNORED_INPUT_COLUMNS: Final[tuple[str, ...]] = (
+    COL_STARTLIFETIME,
+    COL_ENDLIFETIME,
     "Map Multipod",
     "ACTION",
     "OPC INTERESTING ASSET",
@@ -70,28 +68,11 @@ KNOWN_INPUT_COLUMNS: Final[tuple[str, ...]] = (
 
 STATION_TYPE: Final = "SUB"
 
-#: Network element types where BOTH station references are mandatory.
-BOTH_STATIONS_REQUIRED: Final[frozenset[str]] = frozenset({"LINE", "TRA", "TIE", "DCL"})
+#: Types exported as lines into ``Netzelemente.csv``.
+LINE_TYPES: Final[frozenset[str]] = frozenset({"LINE", "TIE", "DCL", "BUB"})
 
-#: Initial input selection. Other types are intentionally ignored, not defects.
-CONVERSION_ELEMENT_TYPES: Final[frozenset[str]] = frozenset(
-    {"LINE", "TIE", "SUB", "BUB", "DCL"}
-)
-
-#: Types that can form a three-legged circuit.
-MULTIPOD_ELEMENT_TYPES: Final[frozenset[str]] = frozenset({"LINE", "TIE", "DCL"})
-
-#: Literal written for a missing but tolerated station reference.
-MISSING_STATION_LITERAL: Final = "NaN"
-
-#: Filler for columns that are empty in EVERY row.
-#:
-#: ``pandas.read_csv`` infers the dtype of such a column as ``float64`` full of
-#: ``NaN``, which makes the ``.str`` accessor unusable downstream. A single space
-#: carries no business meaning, is indistinguishable from empty in a spreadsheet,
-#: and is enough for pandas to infer a text column. It is deliberately NOT a
-#: business value - inventing one would put fabricated data into the target system.
-DEFAULT_EMPTY_PLACEHOLDER: Final = " "
+#: Every exported type. Rows of any other type are ignored.
+EXPORTED_TYPES: Final[frozenset[str]] = LINE_TYPES | {STATION_TYPE}
 
 #: The exact strings for "reales UW".
 REAL_STATION_TRUE: Final = "Wahr"

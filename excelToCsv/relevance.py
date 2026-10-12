@@ -7,19 +7,15 @@ semicolon-separated string per row.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass
 from typing import Final
 
-import numpy as np
-import pandas as pd
-
 from excelToCsv.issues import IssueCollector
 from excelToCsv.errors import NormalizationError
-from excelToCsv.normalize import NOT_RELEVANT_LITERALS, collapseWhitespace, isRelevant
-from excelToCsv.reader import columnValues
+from excelToCsv.normalize import collapseWhitespace, isRelevant
+from excelToCsv.reader import InputRow
 from excelToCsv.schema import KNOWN_INPUT_COLUMNS
 
 #: Headers that indicate a relevance column.
@@ -38,19 +34,6 @@ _LABEL_NOISE: Final = re.compile(r"interesting|relevant|\bfor\b", re.IGNORECASE)
 
 #: Separator between several organisations in ``relevant für``.
 RELEVANCE_SEPARATOR: Final = ";"
-
-_EMPTY_RELEVANCE: Final = ""
-
-#: Value representations that carry no information for the diagnostic.
-_BLANK_REPRESENTATIONS: Final[frozenset[str]] = frozenset({"''", "None", "nan", "' '"})
-
-
-def toJsonList(values: list[str]) -> str:
-    """Serialize a list of values as a compact JSON list (``["a","b"]``).
-
-    Still used for the station ``Spannung`` column, which stays a JSON list.
-    """
-    return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
 
 
 def joinRelevance(values: list[str]) -> str:
@@ -126,62 +109,19 @@ def extractRelevanceColumns(
     return detected
 
 
-def buildRelevantFor(
-    frame: pd.DataFrame,
-    relevanceColumns: list[RelevanceColumn],
-    rowNumbers: np.ndarray,
-    elementIds: np.ndarray,
-    elementTypes: np.ndarray,
-    collector: IssueCollector,
-) -> np.ndarray:
-    """Build the ``relevant für`` column as semicolon-separated organisations.
-
-    Several organisations are written as ``50Hertz;TennetD``, a single one as a
-    plain name, and none as an empty field.
+def relevantFor(row: InputRow, columns: list[RelevanceColumn], collector: IssueCollector) -> str:
+    """The organisations a row is relevant for, as ``a;b;c`` (empty if none).
 
     I and R select the organisation equally; zero and blank cells do not.
     Unknown markers are reported with their source row and column.
     """
-    rowCount = len(frame)
-    if rowCount == 0:
-        return np.empty(0, dtype=object)
-    if not relevanceColumns:
-        return np.full(rowCount, _EMPTY_RELEVANCE, dtype=object)
-
-    flags = np.zeros((rowCount, len(relevanceColumns)), dtype=bool)
-    for columnIndex, relevance in enumerate(relevanceColumns):
-        values = columnValues(frame, relevance.column)
-        for position, value in enumerate(values):
-            try:
-                flags[position, columnIndex] = isRelevant(value)
-            except NormalizationError as error:
-                collector.error(
-                    error.problem,
-                    row=int(rowNumbers[position]),
-                    elementId=elementIds[position],
-                    elementType=elementTypes[position],
-                    field=relevance.column,
-                    value=value,
-                    expected=error.expected,
-                )
-
-        if flags[:, columnIndex].any():
-            continue
-        meaningful = {repr(value) for value in values} - _BLANK_REPRESENTATIONS
-        if meaningful:
-            # Every marker in this column reads as "not relevant". Legitimate, but
-            # worth recording in the debug log when a column looks unexpectedly empty.
-            collector.logger.debug(
-                "Relevance column %r marks no row as relevant. Not relevant: %s. "
-                "Values found in this column: %s",
-                relevance.column,
-                ", ".join(sorted(NOT_RELEVANT_LITERALS)),
-                ", ".join(sorted(meaningful)[:12]),
-            )
-
-    labels = [item.label for item in relevanceColumns]
-    result = []
-    for rowFlags in flags:
-        selected = [label for label, flag in zip(labels, rowFlags) if flag]
-        result.append(joinRelevance(list(dict.fromkeys(selected))))
-    return np.array(result, dtype=object)
+    labels: list[str] = []
+    for relevance in columns:
+        value = row.cells.get(relevance.column)
+        try:
+            if isRelevant(value) and relevance.label not in labels:
+                labels.append(relevance.label)
+        except NormalizationError as error:
+            collector.error(error.problem, field=relevance.column, value=value,
+                            expected=error.expected, **row.context())
+    return joinRelevance(labels)

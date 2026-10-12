@@ -10,20 +10,17 @@ from __future__ import annotations
 import importlib.util
 import logging
 from collections import Counter
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from excelToCsv.errors import ConversionError, NormalizationError
+from excelToCsv.errors import ConversionError
 from excelToCsv.normalize import collapseWhitespace, isBlank, normalizeElementType, normalizeText
 from excelToCsv.schema import (
+    COL_ELEMENT_ID,
     COL_ELEMENT_TYPE,
-    COL_ENDLIFETIME,
-    COL_STARTLIFETIME,
     KNOWN_INPUT_COLUMNS,
     REQUIRED_INPUT_COLUMNS,
 )
@@ -57,6 +54,30 @@ def resolveEngine(engine: str, logger: logging.Logger) -> str:
     return FALLBACK_ENGINE
 
 
+@dataclass(frozen=True, slots=True)
+class InputRow:
+    """One Excel data row: its real row number and its raw cells by column name."""
+
+    number: int
+    cells: dict[str, object]
+
+    def text(self, column: str) -> str:
+        """Trimmed text of a cell; empty or missing cells give ``""``."""
+        return normalizeText(self.cells.get(column))
+
+    @property
+    def elementId(self) -> str:
+        return self.text(COL_ELEMENT_ID)
+
+    @property
+    def elementType(self) -> str:
+        return normalizeElementType(self.cells.get(COL_ELEMENT_TYPE))
+
+    def context(self) -> dict[str, object]:
+        """Row, ELEMENT ID and ELEMENT-TYPE, so every finding points back to Excel."""
+        return {"row": self.number, "elementId": self.elementId, "elementType": self.elementType}
+
+
 @dataclass(slots=True)
 class InputTable:
     """A prepared input table together with its real Excel row numbers."""
@@ -69,10 +90,11 @@ class InputTable:
     def __len__(self) -> int:
         return len(self.frame)
 
-    def subset(self, mask: np.ndarray) -> InputTable:
-        """Keep only the rows selected by ``mask``, with their Excel row numbers."""
-        return replace(self, frame=self.frame.loc[mask].reset_index(drop=True),
-                       rowNumbers=self.rowNumbers[mask])
+    def rows(self) -> list[InputRow]:
+        """Every data row with its Excel row number."""
+        columns = [str(column) for column in self.frame.columns]
+        return [InputRow(int(number), dict(zip(columns, values)))
+                for number, values in zip(self.rowNumbers, self.frame.to_numpy(dtype=object))]
 
 
 def loadExcel(
@@ -312,16 +334,14 @@ def normalizeColumns(frame: pd.DataFrame, logger: logging.Logger) -> pd.DataFram
     return normalized
 
 
-def validateRequiredInputColumns(frame: pd.DataFrame, logger: logging.Logger,
-                                 *, requireLifecycleDates: bool = True) -> None:
+def validateRequiredInputColumns(frame: pd.DataFrame, logger: logging.Logger) -> None:
     """Ensure that every mandatory input column is present.
 
     Raises:
         ConversionError: As soon as at least one required column is missing.
     """
     present = set(frame.columns)
-    required = [name for name in REQUIRED_INPUT_COLUMNS
-                if requireLifecycleDates or name not in {COL_STARTLIFETIME, COL_ENDLIFETIME}]
+    required = REQUIRED_INPUT_COLUMNS
     missing = [name for name in required if name not in present]
     if missing:
         for name in missing:
@@ -363,8 +383,6 @@ def buildInputTable(
     logger: logging.Logger,
     engine: str = DEFAULT_ENGINE,
     headerRow: int | None = None,
-    *,
-    requireLifecycleDates: bool = True,
 ) -> InputTable:
     """The complete read path: Excel -> validated, prepared ``InputTable``.
 
@@ -377,7 +395,7 @@ def buildInputTable(
 
     frame = applyHeaderRow(raw, headerIndex)
     frame = normalizeColumns(frame, logger)
-    validateRequiredInputColumns(frame, logger, requireLifecycleDates=requireLifecycleDates)
+    validateRequiredInputColumns(frame, logger)
     logger.info("Found %d data row(s) below the header.", len(frame))
 
     rowNumbers = np.arange(len(frame), dtype=np.int64) + headerIndex + HEADER_ROW_OFFSET
@@ -388,49 +406,3 @@ def buildInputTable(
         sheetName=sheetName,
         headerRowNumber=headerIndex + 1,
     )
-
-
-def columnValues(frame: pd.DataFrame, column: str) -> np.ndarray:
-    """Return a column as an object array; a missing column yields ``None`` values."""
-    if column in frame.columns:
-        return frame[column].to_numpy(dtype=object)
-    return np.full(len(frame), None, dtype=object)
-
-
-def textColumn(frame: pd.DataFrame, column: str) -> np.ndarray:
-    """Return a column as trimmed text values (empty values become ``""``)."""
-    values = columnValues(frame, column)
-    return np.fromiter(
-        (normalizeText(value) for value in values), dtype=object, count=len(values)
-    )
-
-
-def elementTypeColumn(frame: pd.DataFrame) -> np.ndarray:
-    """Return the normalized (uppercase) ELEMENT-TYPE of every row."""
-    values = columnValues(frame, COL_ELEMENT_TYPE)
-    return np.fromiter(
-        (normalizeElementType(value) for value in values), dtype=object, count=len(values)
-    )
-
-
-def applyNormalizer(
-    values: np.ndarray,
-    normalizer: Callable[[Any], str],
-) -> tuple[np.ndarray, list[tuple[int, NormalizationError]]]:
-    """Apply a normalizer column-wise and collect the individual failures.
-
-    Instead of stopping at the first problem, every faulty value is reported with
-    its position, so one run surfaces all errors at once.
-
-    Returns:
-        A tuple of normalized values and ``(position, error)`` pairs.
-    """
-    result = np.empty(len(values), dtype=object)
-    failures: list[tuple[int, NormalizationError]] = []
-    for position, value in enumerate(values):
-        try:
-            result[position] = normalizer(value)
-        except NormalizationError as error:
-            result[position] = ""
-            failures.append((position, error))
-    return result, failures

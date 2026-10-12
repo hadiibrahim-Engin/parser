@@ -1,4 +1,4 @@
-"""Automatic, Excel-traceable maintenance artifacts for each export attempt."""
+"""Fehlerliste.csv and Pflegebericht.html: every finding traced back to its Excel cell."""
 from __future__ import annotations
 
 import csv
@@ -58,8 +58,9 @@ def reportFields(severity: str, issue: Issue, inputFile: str, sheet: str,
             issue.expected, issue.action)
 
 
-def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, published):
-    """Reports are separate from MJAP input tables; never modify source Excel."""
+def writeReports(inputPath, outputDir, table, result, issues):
+    """Write both reports for this run, successful or not; never modify the Excel."""
+    published = result is not None and result.stationsPath is not None
     outputDir = Path(outputDir)
     outputDir.mkdir(parents=True, exist_ok=True)
     ordered = sortIssues(issues)
@@ -80,33 +81,22 @@ def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, publ
 
     e = lambda value: escape(str(value), quote=True)
     counts = Counter(severity for severity, _ in ordered)
-    excluded = set(result.excludedRows) if result is not None else set()
     status = 'Export veröffentlicht' if published else 'Export abgebrochen – keine neuen MJAP-CSV-Dateien veröffentlicht'
     summary = [f'<p><strong>{e(status)}</strong></p>',
                f'<p>Eingabe: {e(inputFile)}<br>Blatt: {e(sheet)}<br>'
                f'Erzeugt: {e(datetime.now().astimezone().isoformat(timespec="seconds"))}</p>',
-               f'<p>{counts["ERROR"]} Fehler; {counts["WARNING"]} Warnungen; '
-               f'{len(excluded)} ausgeschlossene Excel-Zeilen.</p>']
-    if result is not None and result.excludedCompanionCount:
-        summary.append(f'<p>{result.excludedCompanionCount} ausgeschlossene Begleitdatensätze.</p>')
-    if result is not None and result.lifecycleDates is not None:
-        start, end = result.lifecycleDates
+               f'<p>{counts["ERROR"]} Fehler; {counts["WARNING"]} Warnungen.</p>']
+    if result is not None:
+        start, end = result.planningDates
         summary.append(f'<p>Erzeugter Planungszeitraum für alle Stationen und Netzelemente: '
                        f'IBN = {e(start)}; ABN = {e(end)}. '
                        'STARTLIFETIME und ENDLIFETIME aus der Eingabe werden nicht übernommen.</p>')
     if published:
         summary.append(f'<p>Geschrieben: {len(result.stations)} Stationen und {len(result.networkElements)} Netzelemente.</p>')
-        if result.networkElements.empty:
-            summary.append('<p><strong>Keine verbundenen Netzelemente im Export vorhanden.</strong> '
-                           'Netzelemente.csv enthält nur die Spaltenüberschriften. '
-                           'Typfilter und die folgenden Befunde prüfen. '
-                           'Der vollständige MJAP-Assistent benötigt ein verbundenes Netz.</p>')
     else:
         summary.append('<p>Eventuell vorhandene ältere CSV-Dateien sind kein Ergebnis dieses Laufs. Vor einem QGIS-Import den Exportstatus prüfen.</p>')
-    summary.append('<p>Pflege erfolgt in der ursprünglichen Excel-Datei. Fehler und Warnungen korrigieren, '
-                   'abhängige Stationen/Dreibeine gemeinsam prüfen und danach denselben Exportbefehl erneut ausführen. '
-                   'Ein Teil-Export ersetzt die CSV-Tabellen vollständig durch den verbleibenden geprüften Bestand; '
-                   'ausgeschlossene Elemente fehlen entsprechend in der Karte.</p>')
+    summary.append('<p>Pflege erfolgt in der ursprünglichen Excel-Datei. Fehler und Warnungen korrigieren '
+                   'und danach denselben Exportbefehl erneut ausführen.</p>')
     rows = ''.join('<tr>' + ''.join(f'<td>{e(value)}</td>' for value in fields) + '</tr>'
                    for fields in reportRows)
     tableHtml = '<table><thead><tr>' + ''.join(f'<th>{e(col)}</th>' for col in HTML_COLUMNS) + '</tr></thead><tbody>' + rows + '</tbody></table>'
@@ -114,7 +104,7 @@ def writeMaintenanceReports(inputPath, outputDir, table, result, issues, *, publ
     if table is not None:
         # Include normalized raw input values, not corrected output values.
         # Sheet/row references point to the unchanged original workbook.
-        affected = excluded | {issue.row for _, issue in ordered if issue.row is not None and not issue.source}
+        affected = {issue.row for _, issue in ordered if issue.row is not None and not issue.source}
         columns = list(table.frame.columns)
         values = table.frame.to_numpy(dtype=object)
         for position, number in enumerate(table.rowNumbers):

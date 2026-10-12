@@ -14,20 +14,12 @@ ROOT = Path(__file__).resolve().parent
 
 # ====================== HIER DEINE WERTE ÄNDERN ==============================
 # Windows-Beispiel: Path(r"C:\Daten\mein_netz.xlsx")
-INPUT_XLSX = ROOT / "docs/beispiel/teil-export/DUMMY_TeilExport.xlsx"
+INPUT_XLSX = ROOT / "docs/beispiel/DUMMY_Netz.xlsx"
 OUTPUT_DIR = ROOT / "output/debug-parser"
 
 SHEET = None                 # None: erstes Blatt; sonst Blattname oder Index (0-basiert)
 HEADER_ROW = None            # None: automatisch; sonst Excel-Headerzeile (1-basiert)
 ENGINE = "auto"              # "auto", "openpyxl" oder "calamine"
-EXPORT_MODE = "mjap-network" # "mjap-network", "mjap-bundle" oder "legacy"
-EXCLUDE_FINDINGS = True      # Elemente mit Fehler/Warnung + Abhängigkeiten ausschließen
-STRICT = False              # True: gesamter MJAP-Export ohne Datenbefunde erforderlich
-
-# Nur für EXPORT_MODE = "mjap-bundle"; echte, befüllte Eingabe-CSV-Dateien.
-FREISCHALTUNGEN_CSV = None   # Beispiel: Path(r"C:\Daten\Freischaltungen.csv")
-PROJEKTE_CSV = None         # Beispiel: Path(r"C:\Daten\Projekte.csv")
-
 SHOW_DETAILS = True
 LOG_LEVEL = "INFO"          # "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
 DEBUG_LOG = OUTPUT_DIR / "parser-debug.log" # None: keine zusätzliche Logdatei
@@ -44,8 +36,6 @@ def run_debug():
     from excelToCsv.loggingSetup import addDebugFileHandler, configureLogging
     from excelToCsv.pipeline import runConversion
 
-    if EXPORT_MODE not in {"mjap-network", "mjap-bundle", "legacy"}:
-        raise ValueError("EXPORT_MODE muss mjap-network, mjap-bundle oder legacy sein.")
     if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         raise ValueError("Unbekannter LOG_LEVEL.")
 
@@ -75,18 +65,10 @@ def run_debug():
         sheet=SHEET,
         headerRow=HEADER_ROW,
         engine=ENGINE,
-        mjapNetwork=EXPORT_MODE == "mjap-network",
-        mjap=EXPORT_MODE == "mjap-bundle",
-        strict=STRICT,
-        excludeFindings=EXCLUDE_FINDINGS and not STRICT and EXPORT_MODE != "legacy",
-        maintenanceReports=True,
-        outagesPath=Path(FREISCHALTUNGEN_CSV) if FREISCHALTUNGEN_CSV is not None else None,
-        projectsPath=Path(PROJEKTE_CSV) if PROJEKTE_CSV is not None else None,
     )
-    # Breakpoint hier: result.stations, result.networkElements, result.issues,
-    # result.excludedRows und alle erzeugten Pfade untersuchen.
-    logger.info("Debug-Lauf beendet: %d Stationen, %d Netzelemente; %d Excel-Zeilen ausgeschlossen.",
-                len(result.stations), len(result.networkElements), len(result.excludedRows))
+    # Breakpoint hier: result.stations, result.networkElements und result.issues untersuchen.
+    logger.info("Debug-Lauf beendet: %d Stationen, %d Netzelemente.",
+                len(result.stations), len(result.networkElements))
     return result
 
 

@@ -1,10 +1,7 @@
 """Collecting and formatting business findings (errors / warnings).
 
-The central error strategy:
-
-* ``WARNING`` - tolerable, the conversion carries on.
-* ``ERROR``   - ALWAYS fatal. Every error of a phase is collected and logged in
-  full, then the conversion aborts BEFORE any CSV file comes into existence.
+Warnings retain usable records. Errors identify records to exclude together
+with their dependencies; file and schema failures abort the export.
 """
 
 from __future__ import annotations
@@ -16,7 +13,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from excelToCsv.errors import ConversionError
 from excelToCsv.loggingSetup import findingsLogger
 
 #: How an empty value is rendered in log messages.
@@ -173,23 +169,16 @@ def writeIssueReport(
 
 @dataclass(slots=True)
 class IssueCollector:
-    """Collect errors and warnings and force the abort at phase boundaries.
-
-    Errors are logged immediately (so the user sees them live) but only turned
-    into a :class:`ConversionError` at a defined phase boundary via
-    :meth:`abortIfFailed`. That way one run surfaces ALL problems instead of
-    just the first.
-    """
+    """Collect and log findings with source context for later row exclusion."""
 
     logger: logging.Logger
     details: logging.Logger | None = None
     errors: list[Issue] = field(default_factory=list)
     warnings: list[Issue] = field(default_factory=list)
     maxLoggedErrors: int = 200
-    strict: bool = False
 
     def error(self, problem: str, **context: object) -> None:
-        """Record a fatal finding and log it immediately.
+        """Record an unusable-record finding and log it immediately.
 
         ``stacklevel=2`` makes the source location in the log point at the
         calling domain module (e.g. ``stations.py``) instead of this file.
@@ -252,25 +241,3 @@ class IssueCollector:
         combined = [(SEVERITY_ERROR, issue) for issue in self.errors]
         combined += [(SEVERITY_WARNING, issue) for issue in self.warnings]
         return sortIssues(combined)
-
-    def abortIfFailed(self, phase: str) -> None:
-        """Abort the conversion when this phase produced any error.
-
-        Only in ``strict`` mode. By default the errors have already been logged
-        in full and the conversion carries on, so the CSV files still get
-        written and the log is the list of things to fix.
-        """
-        if not self.errors or not self.strict:
-            return
-        count = len(self.errors)
-        self.logger.critical(
-            "Conversion aborted in phase '%s': %d fatal error%s. No CSV files were written.",
-            phase,
-            count,
-            "" if count == 1 else "s",
-            stacklevel=2,
-        )
-        raise ConversionError(
-            f"{count} fatal error(s) during phase '{phase}'",
-            issues=list(self.allIssues()),
-        )

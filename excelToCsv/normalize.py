@@ -14,7 +14,6 @@ import datetime as dt
 import math
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Final
 
 from excelToCsv.errors import NormalizationError
@@ -350,93 +349,8 @@ def normalizeCoordinate(
 # Dates
 # --------------------------------------------------------------------------- #
 
+#: Date format of IBN / ABN, as MJAP expects it.
 DATE_OUTPUT_FORMAT: Final = "%d.%m.%Y"
-
-#: Excel serial numbers (1900 system) are relative to this origin.
-_EXCEL_EPOCH: Final = dt.datetime(1899, 12, 30)
-_EXCEL_SERIAL_RANGE: Final = (1.0, 2958465.0)  # 01.01.1900 .. 31.12.9999
-
-#: Deterministic list of formats - nothing is ever guessed (no dayfirst heuristic).
-_DATE_FORMATS: Final[tuple[str, ...]] = (
-    "%Y-%m-%d",
-    "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y/%m/%d",
-    "%d.%m.%Y",
-    "%d.%m.%Y %H:%M:%S",
-    "%d/%m/%Y",
-    "%d/%m/%Y %H:%M:%S",
-    "%d-%m-%Y",
-    "%Y%m%d",
-)
-
-_DATE_EXPECTATION: Final = (
-    "A parsable date, e.g. 2025-05-09, 09/05/2025, 09.05.2025 or an Excel date value."
-)
-
-
-#: Separator between several dates inside one IBN/ABN field.
-DATE_SEPARATOR: Final = ";"
-
-
-def normalizeDate(value: object) -> str:
-    """Normalize one or several dates to ``DD.MM.YYYY``.
-
-    A field may carry more than one date, separated by ``;`` - for example
-    ``09.09.1900;02.05.2011``. Each part is normalized on its own and the parts
-    are rejoined with the same separator, so the multi-date shape survives.
-
-    An empty source value stays empty. A non-empty part that cannot be
-    interpreted reliably is a fatal error.
-    """
-    if isBlank(value):
-        return ""
-
-    if isinstance(value, str) and DATE_SEPARATOR in value:
-        parts = [part for part in value.split(DATE_SEPARATOR) if part.strip(_WHITESPACE)]
-        if not parts:
-            return ""
-        return DATE_SEPARATOR.join(normalizeSingleDate(part) for part in parts)
-
-    return normalizeSingleDate(value)
-
-
-def normalizeSingleDate(value: object) -> str:
-    """Normalize exactly one date value to ``DD.MM.YYYY``."""
-    if isBlank(value):
-        return ""
-
-    if isinstance(value, dt.date):  # includes datetime
-        return value.strftime(DATE_OUTPUT_FORMAT)
-
-    if isinstance(value, bool):
-        raise NormalizationError("Value is not a valid date.", _DATE_EXPECTATION)
-
-    if isinstance(value, (int, float)):
-        serial = float(value)
-        low, high = _EXCEL_SERIAL_RANGE
-        if not low <= serial <= high:
-            raise NormalizationError(
-                "Numeric value is not a plausible Excel date serial.", _DATE_EXPECTATION
-            )
-        return (_EXCEL_EPOCH + dt.timedelta(days=serial)).strftime(DATE_OUTPUT_FORMAT)
-
-    return _normalizeDateText(str(value).strip(_WHITESPACE))
-
-
-@lru_cache(maxsize=4096)
-def _normalizeDateText(text: str) -> str:
-    """Parse one date text with the fixed formats; cached since columns repeat dates."""
-    for pattern in _DATE_FORMATS:
-        try:
-            return dt.datetime.strptime(text, pattern).strftime(DATE_OUTPUT_FORMAT)
-        except ValueError:
-            continue
-
-    try:
-        return dt.datetime.fromisoformat(text).strftime(DATE_OUTPUT_FORMAT)
-    except ValueError:
-        raise NormalizationError("Value is not a valid date.", _DATE_EXPECTATION) from None
 
 
 # --------------------------------------------------------------------------- #
@@ -474,10 +388,7 @@ def isRelevant(value: object) -> bool:
 # Station identifiers
 # --------------------------------------------------------------------------- #
 
-#: Prefix marking a virtual X node.
-_VIRTUAL_PREFIX: Final = "X"
-
-#: Separator between station name and voltage level inside an ``ELEMENT ID``.
+#: Separator between owner and ELEMENT ID inside an MJAP-ID.
 STATION_ID_SEPARATOR: Final = "_"
 
 
@@ -492,43 +403,3 @@ def buildMjapId(owner: object, elementId: object) -> str:
     if not normalizedOwner or not normalizedElementId:
         return ""
     return f"{normalizedOwner}{STATION_ID_SEPARATOR}{normalizedElementId}"
-
-
-def splitStationId(elementId: str) -> tuple[str, str]:
-    """Split ``<stationName>_<voltageLevel>`` at the LAST ``_``.
-
-    Without an underscore the whole id counts as the station name and the
-    voltage level is empty.
-    """
-    name, separator, level = elementId.rpartition(STATION_ID_SEPARATOR)
-    if not separator:
-        return elementId, ""
-    return name, level
-
-
-def followsStationIdConvention(elementId: str, voltageLevel: object) -> bool:
-    """Return whether an id follows ``<name>_<voltage-level>``.
-
-    Merely containing an underscore is not sufficient: both parts must be
-    populated and the suffix must agree with ``VOLTAGE-LEVEL`` after the same
-    numeric normalization used for the output.  For aggregate station rows a
-    suffix may name either one of the listed levels or their complete ``/``
-    separated value.
-    """
-    name, level = splitStationId(elementId)
-    if not name or not level:
-        return False
-
-    normalizedLevel = normalizeVoltage(level)
-    expectedLevels = splitVoltages(voltageLevel)
-    if not normalizedLevel or not expectedLevels:
-        return False
-    return normalizedLevel in expectedLevels or normalizedLevel == _VOLTAGE_SEPARATOR.join(
-        expectedLevels
-    )
-
-
-def isVirtualStation(elementId: str) -> bool:
-    """Return ``True`` when the name before the last ``_`` starts with ``X``."""
-    name, _ = splitStationId(elementId)
-    return name.startswith(_VIRTUAL_PREFIX)

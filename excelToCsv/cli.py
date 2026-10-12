@@ -20,17 +20,15 @@ from excelToCsv.issues import (
 )
 from excelToCsv.loggingSetup import addDebugFileHandler, configureLogging
 from excelToCsv.pipeline import runConversion
-from excelToCsv.schema import DEFAULT_EMPTY_PLACEHOLDER
 
 #: Exit codes.
 EXIT_SUCCESS = 0
 EXIT_UNEXPECTED = 1
 EXIT_CONVERSION_ERROR = 2
-EXIT_PARTIAL_EXPORT = 3
 
 
 def buildParser() -> argparse.ArgumentParser:
-    """Read export options; the default writes the two MJAP network CSVs."""
+    """Command line options."""
     parser = argparse.ArgumentParser(prog='converter.py',
         description='Convert Excel into MJAP-compatible Stationen.csv and Netzelemente.csv.')
     parser.add_argument('input', type=Path, help='Input Excel file (.xlsx).')
@@ -42,20 +40,7 @@ def buildParser() -> argparse.ArgumentParser:
     parser.add_argument('--engine', default='auto', choices=['auto', 'openpyxl', 'calamine'],
                         help='Excel reader (auto prefers calamine if installed).')
 
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument('--mjap', action='store_true', help='Export all four MJAP tables.')
-    mode.add_argument('--legacy', action='store_true', help='Use the historical CSV format.')
-    parser.add_argument('--freischaltungen', type=Path, dest='outagesPath',
-                        help='Switching CSV with real records; required for --mjap.')
-    parser.add_argument('--projekte', type=Path, dest='projectsPath',
-                        help='Project CSV with real records; required for --mjap.')
-    parser.add_argument('--strict', action='store_true', help='Abort on errors; retain warnings.')
     parser.add_argument('--quote-all', action='store_true', dest='quoteAll', help='Quote every CSV field.')
-    parser.add_argument('--target-format', type=Path, dest='targetFormatPath', metavar='FILE',
-                        help='JSON column/type mapping; MJAP requires canonical column names.')
-    parser.add_argument('--encoding', default='utf-8', help='Legacy encoding; MJAP always uses UTF-8 with BOM.')
-    parser.add_argument('--empty-placeholder', default=DEFAULT_EMPTY_PLACEHOLDER, dest='emptyPlaceholder',
-                        metavar='TEXT', help='Legacy filler for empty columns (default: one space).')
 
     parser.add_argument('--details', action='store_true', dest='showDetails', help='Print every finding.')
     parser.add_argument('--log-level', default='INFO', dest='logLevel',
@@ -126,19 +111,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.outputDir,
             logger,
             sheet=resolveSheet(arguments.sheet),
-            encoding=arguments.encoding,
             quoteAll=arguments.quoteAll,
             engine=arguments.engine,
             headerRow=arguments.headerRow,
-            strict=arguments.strict,
-            emptyPlaceholder=arguments.emptyPlaceholder,
-            targetFormatPath=arguments.targetFormatPath,
-            mjap=arguments.mjap,
-            mjapNetwork=not arguments.mjap and not arguments.legacy,
-            outagesPath=arguments.outagesPath,
-            projectsPath=arguments.projectsPath,
-            excludeFindings=not arguments.legacy and not arguments.strict,
-            maintenanceReports=True,
         )
     except ConversionError as exc:
         # The cause has already been logged in full detail. The report matters
@@ -154,8 +129,4 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_UNEXPECTED
 
     writeReport(arguments.issueFile, result.issues, logger)
-    # A published partial dataset has a distinct status from a failed export.
-    if result.excludedRows or result.excludedCompanionCount:
-        logger.warning('Teil-Export veröffentlicht. Ausgeschlossene Elemente stehen in Fehlerliste.csv und Pflegebericht.html. Exit-Code: 3.')
-        return EXIT_PARTIAL_EXPORT
-    return EXIT_CONVERSION_ERROR if result.errorCount else EXIT_SUCCESS
+    return EXIT_SUCCESS

@@ -1,54 +1,144 @@
-"""Transformation of the ``SUB`` rows into ``Stationen.csv``."""
+"""``Stationen.csv``: real stations from SUB rows, virtual stations from tripods."""
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 
-import numpy as np
-import pandas as pd
-
-from excelToCsv.context import ConversionContext, RowSet, emptyColumn, ownerMjapIds
-from excelToCsv.lifecycle import lifecycleColumns
+from excelToCsv.context import ConversionContext
 from excelToCsv.errors import NormalizationError
+from excelToCsv.issues import IssueCollector
+from excelToCsv.multipod import Tripod
 from excelToCsv.normalize import (
     LATITUDE_RANGE,
     LONGITUDE_RANGE,
-    STATION_ID_SEPARATOR,
+    buildMjapId,
     decimalPlaceCount,
-    followsStationIdConvention,
-    isVirtualStation,
     normalizeCoordinate,
-    splitStationId,
     splitVoltages,
 )
-from excelToCsv.reader import columnValues, textColumn
-from excelToCsv.relevance import buildRelevantFor, toJsonList
+from excelToCsv.reader import InputRow
 from excelToCsv.schema import (
     COL_DESCRIPTION,
     COL_ELEMENT_ID,
     COL_LATITUDE,
     COL_LONG_NAME,
     COL_LONGITUDE,
+    COL_TSO,
     COL_UCTE_CODE,
     COL_VOLTAGE_LEVEL,
     REAL_STATION_FALSE,
     REAL_STATION_TRUE,
-    STATION_COLUMNS,
 )
 
+#: A station record: one ``Stationen.csv`` row by column name.
+Station = dict[str, str]
 
-def buildFallbackStationName(longName: str, elementId: str) -> str:
-    """Build a station name for an ELEMENT ID that breaks the naming convention.
 
-    The regular station name comes straight from ``LONG-NAME``. When the
-    ``ELEMENT ID`` does not follow ``<name>_<voltage>`` it carries no voltage
-    level, so the name is assembled as ``<LONG-NAME>_<ELEMENT ID>`` instead.
-    Without a long name the plain ELEMENT ID remains, since a leading separator
-    would only add noise.
+def convertStations(rows: list[InputRow], tripods: list[Tripod],
+                    context: ConversionContext) -> dict[str, Station]:
+    """All stations by ELEMENT ID: every SUB row, then every tripod node.
+
+    SUB rows are the real stations (``reales UW = Wahr``). The node of a tripod
+    is virtual (``reales UW = Falsch``); without a SUB row of its own it is
+    placed at the centre of the tripod's three outer stations.
     """
-    if not longName:
-        return elementId
-    return f"{longName}{STATION_ID_SEPARATOR}{elementId}"
+    stations = _realStations(rows, context)
+    for tripod in tripods:
+        if tripod.node in stations:
+            stations[tripod.node]["reales UW"] = REAL_STATION_FALSE
+            continue
+        latitude, longitude = _centre([stations.get(station) for station in tripod.outerStations])
+        nameRow = tripod.nameRow
+        stations[tripod.node] = stationRecord(
+            nameRow.text(COL_TSO), tripod.node, tripod.node, latitude, longitude,
+            nameRow.cells.get(COL_VOLTAGE_LEVEL), real=False, ucte="", relevantFor="",
+            comment="", planningDates=context.planningDates,
+        )
+    context.logger.info("Found %d real and %d virtual station(s).", len(rows),
+                        sum(record["reales UW"] == REAL_STATION_FALSE for record in stations.values()))
+    return stations
+
+
+def stationRecord(owner: str, elementId: str, name: str, latitude: str, longitude: str,
+                  voltage: object, *, real: bool, ucte: str, relevantFor: str, comment: str,
+                  planningDates: tuple[str, str]) -> Station:
+    start, end = planningDates
+    return {
+        "Eigentümer": owner,
+        "MJAP-ID": buildMjapId(owner, elementId),
+        "Stationsname - Langname": name,
+        "lat": latitude,
+        "long": longitude,
+        "Spannung": json.dumps(splitVoltages(voltage), ensure_ascii=False, separators=(",", ":")),
+        "IBN": start,
+        "ABN": end,
+        "Stationsname - Kurzname": name,
+        "reales UW": REAL_STATION_TRUE if real else REAL_STATION_FALSE,
+        "Stationsname - OPC-Name": "",
+        "ID-GUID intern-1": "",
+        "ID-GUID intern-2": "",
+        "ID-OPC": "",
+        "ID-UCTE": ucte,
+        "relevant für": relevantFor,
+        "ID": ucte,
+        "Kommentar": comment,
+        "IBN - Mehrfach": "",
+        "ABN - Mehrfach": "",
+    }
+
+
+def _realStations(rows: list[InputRow], context: ConversionContext) -> dict[str, Station]:
+    collector = context.collector
+    latitudes = normalizeCoordinates(rows, COL_LATITUDE, LATITUDE_RANGE, context)
+    longitudes = normalizeCoordinates(rows, COL_LONGITUDE, LONGITUDE_RANGE, context)
+    stations: dict[str, Station] = {}
+    firstRow: dict[str, int] = {}
+    for row, latitude, longitude in zip(rows, latitudes, longitudes):
+        elementId, owner = row.elementId, row.text(COL_TSO)
+        if not elementId:
+            collector.error("Station is missing its ELEMENT ID.", field=COL_ELEMENT_ID,
+                            expected="Every SUB row requires a non-empty ELEMENT ID.",
+                            **row.context())
+            continue
+        if elementId in stations:
+            collector.error(f"Duplicate station ELEMENT ID (first used in row {firstRow[elementId]}).",
+                            field=COL_ELEMENT_ID, value=elementId,
+                            expected="Every SUB station requires a unique ELEMENT ID.",
+                            **row.context())
+            continue
+        if not owner:
+            collector.error("Station is missing the owner required for its MJAP-ID.",
+                            field=COL_TSO, expected="A TSO value for <owner>_<ELEMENT ID>.",
+                            **row.context())
+        firstRow[elementId] = row.number
+        stations[elementId] = stationRecord(
+            owner, elementId, row.text(COL_LONG_NAME), latitude, longitude,
+            row.cells.get(COL_VOLTAGE_LEVEL), real=True, ucte=row.text(COL_UCTE_CODE),
+            relevantFor=context.relevantFor(row), comment=row.text(COL_DESCRIPTION),
+            planningDates=context.planningDates,
+        )
+    return stations
+
+
+def _centre(corners: list[Station | None]) -> tuple[str, str]:
+    """Mean lat/long of the outer stations; empty if any of them is unusable."""
+    try:
+        points = [(float(corner["lat"]), float(corner["long"])) for corner in corners if corner]
+    except ValueError:
+        return "", ""
+    if len(points) != len(corners):
+        return "", ""
+    return tuple(_formatCoordinate(sum(axis) / len(points)) for axis in zip(*points))
+
+
+def _formatCoordinate(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+# --------------------------------------------------------------------------- #
+# Coordinates with repair of a forgotten decimal separator
+# --------------------------------------------------------------------------- #
 
 
 def dominantDecimalPlaces(counts: Counter[int]) -> int | None:
@@ -67,26 +157,20 @@ def dominantDecimalPlaces(counts: Counter[int]) -> int | None:
     return max(evidence.items(), key=lambda item: (item[1], item[0]))[0]
 
 
-def _normalizeCoordinateColumn(
-    rows: RowSet,
-    column: str,
-    limits: tuple[float, float],
-    context: ConversionContext,
-) -> np.ndarray:
+def normalizeCoordinates(rows: list[InputRow], column: str, limits: tuple[float, float],
+                         context: ConversionContext) -> list[str]:
     """Normalize a coordinate column, repairing forgotten decimal separators.
 
-    Runs in two passes. The first pass normalizes everything that is already
-    well-formed and records how many decimal places this column uses. The second
-    pass retries only the failures, using that precision to reinsert a decimal
-    separator that was forgotten when the sheet was filled in.
-
-    If not a single value of the column carries a separator there is no precision
-    to derive, and the position is guessed instead (as far right as the range
-    allows). Every repair - derived or guessed - is reported as a ``WARNING`` with
-    the full row context; whatever still fails is reported as a fatal error.
+    The first pass normalizes every well-formed value and records how many
+    decimal places the column uses. The second pass retries the failures with
+    that precision to reinsert a separator that was forgotten in the sheet.
+    Without any value carrying a separator, the position is guessed (as far
+    right as the range allows). Every repair is a warning; whatever still fails
+    is an error.
     """
-    raw = columnValues(rows.frame, column)
-    values = np.empty(len(raw), dtype=object)
+    collector: IssueCollector = context.collector
+    raw = [row.cells.get(column) for row in rows]
+    values = [""] * len(raw)
     precisionCounts: Counter[int] = Counter()
     failures: dict[int, NormalizationError] = {}
     repairs: list[tuple[int, str]] = []
@@ -95,7 +179,6 @@ def _normalizeCoordinateColumn(
         try:
             outcome = normalizeCoordinate(value, limits=limits)
         except NormalizationError as error:
-            values[position] = ""
             failures[position] = error
             continue
         values[position] = outcome.text
@@ -104,154 +187,28 @@ def _normalizeCoordinateColumn(
             repairs.append((position, outcome.repair))
 
     decimalPlaces = dominantDecimalPlaces(precisionCounts)
-    if failures:
-        if decimalPlaces is None:
-            context.logger.warning(
-                "Column %r contains no value with a decimal separator, so its precision "
-                "is unknown. Separator positions will be guessed and must be verified.",
-                column,
-            )
-        for position in list(failures):
-            try:
-                outcome = normalizeCoordinate(
-                    raw[position],
-                    limits=limits,
-                    decimalPlaces=decimalPlaces,
-                    allowWidestFit=decimalPlaces is None,
-                )
-            except NormalizationError as error:
-                failures[position] = error
-                continue
-            values[position] = outcome.text
-            del failures[position]
-            if outcome.repair:
-                repairs.append((position, outcome.repair))
+    if failures and decimalPlaces is None:
+        context.logger.warning(
+            "Column %r contains no value with a decimal separator, so its precision "
+            "is unknown. Separator positions will be guessed and must be verified.", column)
+    for position in list(failures):
+        try:
+            outcome = normalizeCoordinate(raw[position], limits=limits, decimalPlaces=decimalPlaces,
+                                          allowWidestFit=decimalPlaces is None)
+        except NormalizationError as error:
+            failures[position] = error
+            continue
+        values[position] = outcome.text
+        del failures[position]
+        if outcome.repair:
+            repairs.append((position, outcome.repair))
 
     for position, repair in sorted(repairs):
-        context.collector.warning(
-            repair,
-            field=column,
-            value=raw[position],
-            expected="A decimal number using '.' or ',' as decimal separator.",
-            action=f"Writing the corrected value {values[position]} and continuing.",
-            **rows.context(position),
-        )
-
+        collector.warning(repair, field=column, value=raw[position],
+                          expected="A decimal number using '.' or ',' as decimal separator.",
+                          action=f"Writing the corrected value {values[position]} and continuing.",
+                          **rows[position].context())
     for position, error in sorted(failures.items()):
-        context.collector.error(
-            error.problem,
-            field=column,
-            value=raw[position],
-            expected=error.expected,
-            **rows.context(position),
-        )
-
+        collector.error(error.problem, field=column, value=raw[position],
+                        expected=error.expected, **rows[position].context())
     return values
-
-
-def convertStations(
-    rows: RowSet,
-    context: ConversionContext,
-    *,
-    virtualStationIds: set[str],
-) -> pd.DataFrame:
-    """Build the station records from all ``SUB`` rows.
-
-    Validates the mandatory fields (ELEMENT ID, coordinates, date formats) and
-    reports every violation to the collector. Nothing is written here - writing
-    only happens after all validations have passed.
-    """
-    rowCount = len(rows)
-    context.logger.info("Found %d station(s).", rowCount)
-
-    elementIds = rows.elementIds
-    owners, mjapIds = ownerMjapIds(
-        rows, context, "Station",
-        expectedId="Every SUB row requires a non-empty ELEMENT ID.",
-        expectedOwner="Every SUB row requires a non-empty TSO value for <owner>_<ELEMENT ID>.",
-    )
-    ucteCodes = textColumn(rows.frame, COL_UCTE_CODE)
-
-    latitudes = _normalizeCoordinateColumn(rows, COL_LATITUDE, LATITUDE_RANGE, context)
-    longitudes = _normalizeCoordinateColumn(rows, COL_LONGITUDE, LONGITUDE_RANGE, context)
-    startDates, endDates = lifecycleColumns(rows, context)
-
-    voltages = np.fromiter(
-        (toJsonList(splitVoltages(value)) for value in columnValues(rows.frame, COL_VOLTAGE_LEVEL)),
-        dtype=object,
-        count=rowCount,
-    )
-
-    longNames = textColumn(rows.frame, COL_LONG_NAME)
-    voltageLevels = columnValues(rows.frame, COL_VOLTAGE_LEVEL)
-
-    realStation = np.empty(rowCount, dtype=object)
-    stationNames = np.empty(rowCount, dtype=object)
-    for position, elementId in enumerate(elementIds):
-        stationNames[position] = longNames[position]
-        if not elementId:
-            realStation[position] = REAL_STATION_TRUE
-            continue
-
-        # Topology identifies Multipod nodes regardless of their spelling.
-        # Preserve the historical X hint for standalone stations only.
-        virtual = elementId in virtualStationIds or isVirtualStation(elementId)
-        realStation[position] = REAL_STATION_FALSE if virtual else REAL_STATION_TRUE
-        if virtual:
-            name, _ = splitStationId(elementId)
-            context.logger.debug(
-                "Row %d: station %s is a virtual node (name %r) - reales UW = %s.",
-                rows.rowNumbers[position],
-                elementId,
-                name,
-                REAL_STATION_FALSE,
-            )
-
-        if not virtual and not followsStationIdConvention(elementId, voltageLevels[position]):
-            stationNames[position] = buildFallbackStationName(
-                longNames[position], elementId
-            )
-            context.collector.warning(
-                "Station ELEMENT ID does not follow the '<name>_<voltage>' convention.",
-                field=COL_ELEMENT_ID,
-                value=elementId,
-                expected=(
-                    "An ELEMENT ID of the form <name>_<voltage> whose suffix agrees "
-                    "with VOLTAGE-LEVEL, e.g. Berlin_380."
-                ),
-                action=f"Using '{stationNames[position]}' as the station name.",
-                **rows.context(position),
-            )
-
-    relevantFor = buildRelevantFor(
-        rows.frame,
-        context.relevanceColumns,
-        rows.rowNumbers,
-        elementIds,
-        rows.elementTypes,
-        context.collector,
-    )
-
-    data = {
-        "Eigentümer": owners,
-        "MJAP-ID": mjapIds,
-        "Stationsname - Langname": stationNames,
-        "lat": latitudes,
-        "long": longitudes,
-        "Spannung": voltages,
-        "IBN": startDates,
-        "ABN": endDates,
-        "Stationsname - Kurzname": stationNames,
-        "reales UW": realStation,
-        "Stationsname - OPC-Name": emptyColumn(rowCount),
-        "ID-GUID intern-1": emptyColumn(rowCount),
-        "ID-GUID intern-2": emptyColumn(rowCount),
-        "ID-OPC": emptyColumn(rowCount),
-        "ID-UCTE": ucteCodes,
-        "relevant für": relevantFor,
-        "ID": ucteCodes,
-        "Kommentar": textColumn(rows.frame, COL_DESCRIPTION),
-        "IBN - Mehrfach": emptyColumn(rowCount),
-        "ABN - Mehrfach": emptyColumn(rowCount),
-    }
-    return pd.DataFrame(data, columns=list(STATION_COLUMNS), dtype=object)

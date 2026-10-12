@@ -1,117 +1,79 @@
-"""Infer three-legged circuit topology from grouped station references."""
+"""Find tripods (Multipods) and the virtual node at their centre.
+
+In Excel a tripod is four rows:
+
+    MP1   (name row: no Multipod, no stations)
+    L1    Multipod = MP1   Station 1 / Station 2 = XK / A
+    L2    Multipod = MP1   Station 1 / Station 2 = XK / B
+    L3    Multipod = MP1   Station 1 / Station 2 = XK / C
+
+The station shared by all three legs (XK) is the virtual node; A, B and C are
+the real outer stations, in the order of the legs.
+"""
+
 from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
 
-from excelToCsv.context import ConversionContext, RowSet, groupPositions
-from excelToCsv.normalize import normalizeVoltage
-from excelToCsv.reader import InputTable, columnValues, elementTypeColumn, textColumn
-from excelToCsv.schema import (
-    COL_ELEMENT_ID, COL_MULTIPOD,
-    COL_STATION_1, COL_STATION_2, COL_VOLTAGE_LEVEL,
-    MULTIPOD_ELEMENT_TYPES, STATION_TYPE,
-)
+from excelToCsv.issues import IssueCollector
+from excelToCsv.reader import InputRow
+from excelToCsv.schema import COL_MULTIPOD, COL_STATION_1, COL_STATION_2
 
 
 @dataclass(frozen=True, slots=True)
-class MultipodGroup:
-    """Validated topology in Excel order; the group ID need not name a station."""
-
-    identifier: str
-    sourceRows: tuple[int, ...]
-    nodeId: str
-    outerStationIds: tuple[str, ...]
+class Tripod:
+    nameRow: InputRow
+    legs: tuple[InputRow, InputRow, InputRow]
+    node: str
+    outerStations: tuple[str, str, str]
 
 
-def findMultipodSummaryRows(table: InputTable) -> set[int]:
-    """Identify redundant circuit rows before validating missing endpoints.
+def findTripods(rows: list[InputRow], collector: IssueCollector) -> tuple[list[Tripod], set[int]]:
+    """Return the valid tripods and the Excel rows of every Multipod group.
 
-    A summary's ELEMENT ID matches the Multipod ID declared by other line
-    legs. SUB rows are stations, never summaries. A connected member is kept
-    when it could be one of the three legs; three other legs must exist before
-    a connected row can be considered redundant. Group validation is separate:
-    defective or incomplete legs still produce their own findings.
+    Rows of an invalid group are reported and also returned, so they are not
+    exported as ordinary lines.
     """
-    pods = textColumn(table.frame, COL_MULTIPOD)
-    if not any(pods):
-        return set()
-    types = elementTypeColumn(table.frame)
-    ids = textColumn(table.frame, COL_ELEMENT_ID)
-    legCounts = Counter(
-        pod for kind, identifier, pod in zip(types, ids, pods)
-        if kind in MULTIPOD_ELEMENT_TYPES and pod and identifier != pod
-    )
-    if not legCounts:
-        return set()
-    starts = textColumn(table.frame, COL_STATION_1)
-    ends = textColumn(table.frame, COL_STATION_2)
-    return {
-        int(table.rowNumbers[position])
-        for position, identifier in enumerate(ids)
-        if types[position] != STATION_TYPE
-        and identifier in legCounts
-        and pods[position] in ('', identifier)
-        and ((not starts[position] and not ends[position]) or legCounts[identifier] >= 3)
-    }
+    legsByPod: dict[str, list[InputRow]] = {}
+    for row in rows:
+        pod = row.text(COL_MULTIPOD)
+        if pod and row.elementId != pod:
+            legsByPod.setdefault(pod, []).append(row)
+    rowsById = {row.elementId: row for row in rows}
 
-
-def detectMultipodGroups(
-    rows: RowSet,
-    context: ConversionContext,
-    stationIds: set[str],
-) -> list[MultipodGroup]:
-    """Group only by Multipod; derive the virtual node from the three edges.
-
-    A valid star has four distinct stations: one occurs in every edge, and the
-    other three occur once each. Neither the group ID nor a station prefix
-    participates in node detection. Report every row of an invalid group.
-    """
-    positionsById = groupPositions(textColumn(rows.frame, COL_MULTIPOD))
-    if not positionsById:
-        return []
-
-    starts = textColumn(rows.frame, COL_STATION_1)
-    ends = textColumn(rows.frame, COL_STATION_2)
-    voltages = columnValues(rows.frame, COL_VOLTAGE_LEVEL)
-    groups = []
-    for identifier, positions in positionsById.items():
-        edges = [(starts[p], ends[p]) for p in positions]
-        counts = Counter(station for edge in edges for station in edge)
-        nodes = [station for station, count in counts.items() if count == 3]
-        valid = (
-            len(positions) == 3
-            and len(counts) == 4
-            and len(nodes) == 1
-            and sorted(counts.values()) == [1, 1, 1, 3]
-            and all(first and second and first != second for first, second in edges)
-            and set(counts) <= stationIds
-            and len({rows.elementTypes[p] for p in positions}) == 1
-            and rows.elementTypes[positions[0]] in MULTIPOD_ELEMENT_TYPES
-            and len({normalizeVoltage(voltages[p]) for p in positions}) == 1
-        )
-        if not valid:
-            for position in positions:
-                context.collector.error(
-                    "Multipod must describe exactly three unambiguous line legs.",
-                    field=COL_MULTIPOD,
-                    value=identifier,
-                    expected=(
-                        "Exactly three LINE/TIE/DCL rows of the same type and voltage "
-                        "must share this group ID. Their Station 1 / Station 2 references "
-                        "must form three distinct outer SUB stations connected to one "
-                        "common SUB node. The node name and group ID are independent."
-                    ),
-                    **rows.context(position),
-                )
+    tripods: list[Tripod] = []
+    groupRows: set[int] = set()
+    for pod, legs in legsByPod.items():
+        nameRow = rowsById.get(pod)
+        groupRows.update(row.number for row in legs)
+        if nameRow is not None:
+            groupRows.add(nameRow.number)
+        tripod = _buildTripod(nameRow, legs)
+        if isinstance(tripod, Tripod):
+            tripods.append(tripod)
             continue
+        for row in legs if nameRow is None else [nameRow, *legs]:
+            collector.error(tripod, field=COL_MULTIPOD, value=pod,
+                            expected="One name row (ELEMENT ID = Multipod value) and three legs "
+                                     "that share one station and end at three different stations.",
+                            **row.context())
+    return tripods, groupRows
 
-        node = nodes[0]
-        groups.append(MultipodGroup(
-            identifier=identifier,
-            sourceRows=tuple(int(rows.rowNumbers[p]) for p in positions),
-            nodeId=node,
-            outerStationIds=tuple(second if first == node else first
-                                  for first, second in edges),
-        ))
-    return groups
+
+def _buildTripod(nameRow: InputRow | None, legs: list[InputRow]) -> Tripod | str:
+    """The tripod described by these rows, or the problem that prevents it."""
+    if nameRow is None:
+        return "Tripod name row is missing: no row has this Multipod value as ELEMENT ID."
+    if len(legs) != 3:
+        return f"A tripod needs exactly 3 legs, found {len(legs)}."
+    ends = [(leg.text(COL_STATION_1), leg.text(COL_STATION_2)) for leg in legs]
+    if not all(first and second and first != second for first, second in ends):
+        return "Every tripod leg needs two different stations in Station 1 and Station 2."
+    counts = Counter(station for pair in ends for station in pair)
+    nodes = [station for station, count in counts.items() if count == 3]
+    if len(nodes) != 1 or len(counts) != 4:
+        return "The 3 legs must share exactly one station (the virtual node) and end at 3 different stations."
+    node = nodes[0]
+    outer = tuple(second if first == node else first for first, second in ends)
+    return Tripod(nameRow=nameRow, legs=(legs[0], legs[1], legs[2]), node=node, outerStations=outer)
